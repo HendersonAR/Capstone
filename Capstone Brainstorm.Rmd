@@ -1,0 +1,33 @@
+---
+title: "Capstone Brainstorming"
+author: "Andrew H, Juan G, Cody F, Aaron G."
+date: "2025-01-29"
+output: html_document
+---
+
+## Player Discovery
+
+**Idea:**
+
+1.  Identify attributes valued in leagues outside the EPL. Discover players that are undervalued in the EPL and attempt to find a better fit in one of the remaining four leagues.
+
+```{=html}
+<!-- -->
+```
+2.  Identify attributes valued for players in differing leagues. Using attributes valued in particular league, find players in other leagues that might perform well in a particular Top 5 league. (Say for midfielders, the German League values passing accuracy and tackling as large indicators for success in said league. Use those values to find players that fit the bill for midfielders in the German League.)
+
+**Objective:**
+
+Create a system or collection of models that best analyzes player attributes associated with attractive play in the English Premier league in order to find players in other leagues that are being overlooked.\
+\
+**Rough Workflow**
+
+1.  Create a series of models that best encapsulates attributes for attackers, defenders, keepers in the EPL
+
+2.  Run that model against players in the other four leagues
+
+3.  Identify potentially undervalued players.
+
+**Side Projects**
+
+1.  Create a shiny app that conveys possible undervalued players in differing leagues
