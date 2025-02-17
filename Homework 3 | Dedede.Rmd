@@ -1,0 +1,18 @@
+---
+title: "Homework 3"
+author: "King Dedede"
+date: "2025-02-17"
+output: pdf_document
+---
+
+## Introduction
+
+Provide just enough relevant background information to immediately and clearly include the main research objectives and research questions. Additional context and general explanation of the study and its design should be provided. Further details should be in the methods section to follow (for example, it should be at least be clear whether this is an observational study or experiment). There may also be other secondary goals that are considered; however, it is critical that any reader of your proposal should be able to quickly and convincingly find the key aim of the research – what research questions will be addressed?
+
+## Proposed Methods
+
+Methods should be a concise, step-by-step outline what you intend to do with the data according to the design and the objectives of the study. In this case, you have access to the full data when writing the proposal. You may review the variables and think about model fitting which will address the question of interest. You should disclose as much detail as you feel necessary to convey an exact idea of the approach you intend to use for the analysis. You might summarize some of the data in general terms since you have the data (this may be in the form of brief tables or figures, but this is not required). But do note response variable(s) and specify the set of primary predictor variables. You might discuss whether each predictor is expected to be treated as categorical (give levels) or continuous (give units). Also mention if there is an expectation of relevant interactions.
+
+## Research Question(s)
+
+Clearly state your research question or questions. Each question should be one sentence.
