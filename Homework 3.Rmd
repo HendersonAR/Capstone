@@ -1,0 +1,39 @@
+---
+title: "Homework 3"
+output: pdf_document
+date: "2025-02-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+STAT 472 Project Proposal - Soccer Data Analysis
+Cody Farris, Juan Gonzalez, Andrew Henderson, Aaron Graff
+Introduction
+Soccer is the most popular sport in the world.  In Spain, it is so popular that there are over 100 professional and semi-professional clubs.  As such, athletes gifted enough to play European soccer professionally make a lot of money, and top teams continuously try to find talent that will excel on the field.  We decided to focus the first step of our analysis on Spanish league player data over the last decade.  The main goals of our project are to see if we can identify certain traits in lower-level league outfield players (goalkeepers excluded) that might lead them to success in the highly proficient Spanish league.  Conversely, if we identify traits or statistics that tend to lead to poorer performance, we will analyze these discrepancies as well.  
+Objectives:
+Identify characteristics of the Spanish League that bode well for individual player success (i.e. large number of goals scored)
+Analyze data for Spanish league players in the last 10 years to interpret if certain traits (goals, defensive contribution like tackles/steals, shots, etc.) are more important or heavily valued to player success, and if certain traits tend to indicate a player with less success
+Analyze recent data(last 2 years) in other leagues to identify certain young players (23 or younger) who have statistics and traits that might lead them to be successful in the Spanish league. 
+Proposed Methods
+Build scraper to collect desired data, likely using python.
+Scrape data from StatHead (FBref.com) for the last decade of players in the Spanish league.  In order to be included in the dataset, players must have played a minimum of x minutes in the Spanish league over the last 10 years (exact number to be determined). 
+We need to make sure that statistical markers we include in the original model are also found in the lower-level league data we analyze.
+Build data visualizations and models to interpret trends discovered.
+Potential statistical methods would be SVD (singular value decomposition), lasso, regression modeling, cross-validation, bagging/boosting, and other statistical machine learning models.
+Analyze data in lower-level Spanish leagues for 23 and under players, to identify potential to move up to the main league and perform well.
+Repeat this process for the German, French, Italian, and English (Premier) League.
+Variables
+Player, Season, Age, Playing Time, League, Position, Goals, Assists
+
+
+Stathead has advanced stats on Passing, Shooting, and Tackling which we will consider much of, but not all. We are still working on filtering those down. 
+
+We are still exploring including contract data, but worry we may not be able to include this due to time constraints.
+
+Research Question(s)
+What are the most valuable KPI’s (Key Performance Indicator) for success in the Spanish League (Potentially other leagues as well)
+Can we identify player traits in lower-level leagues that allow us to project certain players to be successful in the Spanish League (or other leagues, again), and rank them by importance to success?
+While it is obvious that statistics like goals and tackles are important to a player’s efficiency and ranking, can we distinguish which statistics are the most important to player success?
+
