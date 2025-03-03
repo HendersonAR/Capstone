@@ -1,0 +1,17 @@
+---
+title: "ExploratoryAnalysis"
+author: "King Dedede"
+date: "2025-03-03"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Header 1 
+```{r}
+a <- 1+2
+print(a)
+```
+
