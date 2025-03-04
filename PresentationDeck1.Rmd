@@ -9,9 +9,20 @@ output: powerpoint_presentation
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-# Header 1 
-```{r}
-a <- 1+2
-print(a)
-```
+# Soccer Data Analysis
 
+Aaron Graff, Juan Gonzalez, Andrew Henderson, Cody Farris
+
+# Research Questions and Potential Methods
+
+- Can we identify lower league players, as well as specific statistics that are indicators for potential success in La Liga?
+
+- Using modeling, can we distinguish which statistics in particular are most heavily correlated (most important) to player success in La Liga?
+
+- What are the most valuable Key Performance Indicators (KPIs) in La Liga, as well as other lower-level leagues in Spain?  Do lower-level leagues require more defense, for example, than La Liga?
+
+
+# Dataset and Variable Details
+
+- We have two main datasets that we will be utilizing:
+    - Stathead Soccer Data:  Data consisting of field players statistics (non-goalies) since the 2017-2018 season (when advanced statistics started to be calculated).  These statistics include:
