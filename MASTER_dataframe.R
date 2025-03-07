@@ -36,7 +36,7 @@ process_csv <- function(df) {
 
 ESP1 <- bind_rows(lapply(files, process_csv))
 
-write.csv(master, "ESP1.csv", row.names = FALSE)
+write.csv(ESP1, "ESP1.csv", row.names = FALSE)
 
 
 
@@ -153,6 +153,40 @@ write.csv(GER1, "GER1.csv", row.names = FALSE)
 write.csv(ENG1, "ENG1.csv", row.names = FALSE)
 write.csv(ENG2, "ENG2.csv", row.names = FALSE)
 
+# Load serieB CSVs individually
+serieBA <- read.csv('CSVs/serieBA.csv')
+serieBB <- read.csv('CSVs/serieBB.csv')
+serieBC <- read.csv('CSVs/serieBC.csv')
+serieBD <- read.csv('CSVs/serieBD.csv')
+serieBE <- read.csv('CSVs/serieBE.csv')
+serieBF <- read.csv('CSVs/serieBF.csv')
+serieBG <- read.csv('CSVs/serieBG.csv')
+serieBH <- read.csv('CSVs/serieBH.csv')
+serieBI <- read.csv('CSVs/serieBI.csv')
+serieBJ <- read.csv('CSVs/serieBJ.csv')
+serieBK <- read.csv('CSVs/serieBK.csv')
+serieBL <- read.csv('CSVs/serieBL.csv')
+serieBM <- read.csv('CSVs/serieBM.csv')
+
+serieB_files <- list(serieBA, serieBB, serieBC, serieBD, serieBE, serieBF, 
+                     serieBG, serieBH, serieBI, serieBJ, serieBK, serieBL, serieBM)
+
+# Function to process CSVs (same as your original)
+process_csv <- function(df) {
+  df <- df %>%
+    row_to_names(row_number = 1) %>%
+    clean_names()
+  
+  df$min <- as.numeric(gsub(",", "", df$min))
+  
+  return(df)
+}
+
+# Combine all serieB files
+ITA2 <- bind_rows(lapply(serieB_files, process_csv))
+
+# Save combined CSV
+write.csv(ITA2, "ITA2.csv", row.names = FALSE)
 
 
 
