@@ -5,9 +5,9 @@ library(ggplot2)
 
 ##2023/2024 DATA
 
-one <- read_csv("Downloads/first200.csv")
-two <- read_csv("Downloads/second200.csv")
-thr <- read_csv("Downloads/third200.csv")
+one <- read_csv("CSVs/first200.csv")
+two <- read_csv("CSVs/second200.csv")
+thr <- read_csv("CSVs/third200.csv")
 
 
 files <- list(one, two, thr)
@@ -39,9 +39,9 @@ ggplot(master, aes(x = min)) +
 
 ## 2022/2023 DATA
 
-uno <- read_csv("Downloads/uno.csv")
-dos <- read_csv("Downloads/dos.csv")
-tres <- read_csv("Downloads/tres.csv")
+uno <- read_csv("CSVs/uno.csv")
+dos <- read_csv("CSVs/dos.csv")
+tres <- read_csv("CSVs/tres.csv")
 
 
 docu <- list(uno, dos, tres)
@@ -73,9 +73,9 @@ ggplot(maestro, aes(x = min)) +
 
 
 #
-un <- read_csv("Downloads/un.csv")
-deux <- read_csv("Downloads/deux.csv")
-trois <- read_csv("Downloads/trois.csv")
+un <- read_csv("CSVs/un.csv")
+deux <- read_csv("CSVs/deux.csv")
+trois <- read_csv("CSVs/trois.csv")
 
 
 files <- list(un, deux, trois)
