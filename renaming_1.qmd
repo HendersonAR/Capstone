@@ -1,0 +1,59 @@
+---
+title: "Farris_row1_34"
+format: html
+editor: visual
+---
+
+```{r include = FALSE}
+library(dplyr)
+```
+
+```{r}
+transfer <- read.csv('csv/transfer_dataset_final.csv')
+head(transfer)
+```
+
+```{r}
+transfer <- transfer %>%
+  select(,1:34)
+
+```
+
+```{r}
+head(transfer)
+```
+
+```{r}
+transfer_renamed <- transfer %>%
+  select(,-c(6:16))
+head(transfer_renamed)
+```
+
+```{r}
+transfer_renamed <- transfer_renamed %>%
+  rename('matches_played' = 'mp' ,
+         "minutes" = 'min_2',
+         "minutes_by_90" = 'x90s',
+         'matches_played_starter'= 'starts',
+         'matches_played_sub' = 'subs',
+         'matches_no_play' = 'un_sub',
+         'raw_goals' = 'gls',
+         'raw_assists' = 'ast',
+         'raw_goals_and_assists' = 'g_a',
+         'raw_nonpenaltykick_goal' = 'g_pk',
+         'raw_penaltykick_goal' = 'pk',
+         'raw_penaltykick_attempt' = 'p_katt',
+         'raw_penaltykick_miss' = 'p_km',
+         'total_pass_completed' = 'cmp',
+         'total_pass_attempts' = 'att')
+         
+
+```
+
+```{r}
+head(transfer_renamed)
+```
+
+```{r}
+write.csv(transfer_renamed, 'transfer_renamed_1')
+```
