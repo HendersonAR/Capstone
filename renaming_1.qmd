@@ -55,5 +55,26 @@ head(transfer_renamed)
 ```
 
 ```{r}
-write.csv(transfer_renamed, 'transfer_renamed_1')
+write.csv(transfer_renamed, 'transfer_renamed_1.csv')
+```
+
+## Combine Renamed CSV
+
+```{r}
+transfer_1 <- read.csv('transfer_renamed_1.csv')
+transfer_2 <- read.csv('transfer_renamed_2.csv') %>%
+  select(-c('X','player', 'season'))
+transfer_3 <- read.csv('transfer_renamed_3.csv') %>%
+  select(-c('player', 'season'))
+transfer_4 <- read.csv('transfer_renamed_4.csv') %>%
+  select(-c('Player', 'Season'))
+
+transfer_final <- cbind(transfer_1, transfer_2, transfer_3, transfer_4) %>%
+  select(-c('X.1', 'X'))
+
+write.csv('final_transfer_renamed')
+```
+
+```{r}
+write.csv(transfer_final,'final_transfer_renamed.csv')
 ```
