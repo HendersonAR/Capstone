@@ -1,0 +1,51 @@
+---
+title: "Column 35-56 Variable Reduction"
+format: pdf
+editor: visual
+---
+
+```{r, include = FALSE}
+library(dplyr)
+```
+
+```{r}
+transfer <- read.csv('csv/transfer_dataset_final.csv')
+head(transfer)
+```
+
+```{r}
+column_subset <- c(2,4, 35:56)
+transfer_subset <- transfer %>%
+  select(,all_of(column_subset))
+```
+
+```{r}
+transfer_renamed <- transfer_subset %>%
+  rename("Total_Cmp%" = "cmp_percent_2",
+         "Total_Passes_Leading_to_Shot" = "kp",
+         "Total_Cmp_Passes_in_Final_Third_Pitch" = "x3_jan",
+         "Cmp_Passes_18_yard_box" = "ppa",
+         "Cmp_Crosses_18_yard_box" = "crs_pa",
+         "Progressive_Passes" = "prg_p",
+         "Total_Pass_Distance" = "tot_dist",
+         "Total_Pass_Distance_Towards_Opp_Goal" = "prg_dist",
+         "5_to_15_yd_cmp_passes" = "cmp_2",
+         "5_to_15_yd_att_passes" = "att_2",
+         "5_to_15_yd_pass_cmp%" = "cmp_percent_3",
+         "15_to_30_yd_cmp_passes" = "cmp_3",
+         "15_to_30_yd_att_passes" = "att_3",
+         "15_to_30_yd_pass_cmp%" = "cmp_percent_4",
+         "More_than_30_yd_cmp_passes" = "cmp_4",
+         "More_than_30_yd_att_passes" = "att_4",
+         "More_than_30_yd_pass_cmp%" = "cmp_percent_5",
+         "Shot_Creating_Actions" = "sca_2",
+         "Cmp_live_ball_passes_leading_to_shot" = "pass_live",
+         "Cmp_dead_ball_passes_leading_to_shot" = "pass_dead",
+         "Successful_take_ons_leading_to_shot"= "to",
+         "Shots_leading_to_another_shot" = "sh")
+transfer_renamed
+```
+
+```{r}
+write.csv(transfer_renamed, "transfer_renamed_2.csv")
+```
