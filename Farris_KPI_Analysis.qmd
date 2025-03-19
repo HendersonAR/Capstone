@@ -1,0 +1,161 @@
+---
+title: "Farris_KPI_Analysis"
+format: html
+editor: visual
+---
+
+```{r message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(randomForest)
+library(knitr)
+```
+
+```{r}
+transfers <- read.csv('final_transfer_renamed.csv')
+
+```
+
+## Convert Data to Per 90 Variables
+
+```{r}
+transfers90 <- transfers %>%
+  mutate(across(
+          -c(player, age, season, transfer, nation, team, comp, matches_played, 
+          minutes, minutes_by_90, matches_played_starter, matches_played_sub, matches_no_play,
+          Total_Cmp.,Progressive_Passes_Received, TakeOn_Success_Percentage,
+          TakeOn_Tackled_Percentage, Challenges_Tackle_Percentage, Aerial_Win_Percentage,
+          Position),
+          ~./minutes_by_90))
+```
+
+## Column Adjustment
+
+Removed Columns: X, nation, team, comp, minutes, minutes_by_90, Position
+
+Added: Binary Columns for each Position \~
+
+1.  FW: Forward
+2.  MF: Mid Fielder
+3.  DF: Defender
+
+```{r}
+transfers90 <- transfers90 %>%
+  select(-c(X, nation, team, comp, minutes, minutes_by_90)) %>%
+  mutate(MF = ifelse(grepl("MF", Position), 1,0),
+         FW = ifelse(grepl("FW", Position), 1,0),
+         DF = ifelse(grepl("DF", Position), 1,0)) %>%
+  select(-Position)
+```
+
+## Row Adjustment
+
+Removed NA values
+
+```{r}
+transfers90 %>%
+  filter(is.na(Challenges_Tackle_Percentage))
+```
+
+```{r}
+transfers90 <- transfers90 %>%
+  na.omit() 
+```
+
+# Recursive Feature Selection
+
+```{r}
+X <- transfers90 %>%
+  select(-c(player, season, transfer))
+
+y <- as.factor(transfers90$transfer)
+
+```
+
+## Bootstrap Method
+
+```{r}
+control <- rfeControl(
+  functions = rfFuncs,  
+  method = "boot",        
+  number = 5)
+```
+
+```{r rfe_analysis, cache = TRUE}
+rfe_result <- rfe(
+  x = as.data.frame(X),
+  y = y,
+  sizes = c(10,20,30,40,50), 
+  rfeControl = control,
+  metric = 'Kappa',
+  strata = y
+)
+```
+
+```{r}
+variables <- rfe_result$results$Variables
+kappa <- rfe_result$results$Kappa
+
+ggplot() +
+  geom_point(aes(x = variables, y = kappa)) +
+  theme_minimal() +
+  ylab("Kappa") +
+  xlab("Number of Variables") +
+  ggtitle("Variable Selection - Bootstrap")
+  
+```
+
+```{r}
+kable(rfe_result$results)
+```
+
+```{r}
+top_vars <- predictors(rfe_result)
+
+kable(top_vars)
+```
+
+## Cross Validation Method
+
+```{r}
+control <- rfeControl(
+  functions = rfFuncs,  
+  method = 'cv',        
+  number = 5)
+```
+
+```{r rfe_analysis2, cache = TRUE}
+rfe_result <- rfe(
+  x = as.data.frame(X),
+  y = y,
+  sizes = c(10,20,30,40,50), 
+  rfeControl = control,
+  metric = 'Kappa',
+  strata = y
+)
+```
+
+```{r}
+variables <- rfe_result$results$Variables
+kappa <- rfe_result$results$Kappa
+
+ggplot() +
+  geom_point(aes(x = variables, y = kappa)) +
+  theme_minimal() +
+  ylab("Kappa") +
+  xlab("Number of Variables") +
+  ggtitle("Variable Selection - Cross Validation")
+  
+```
+
+```{r}
+kable(rfe_result$results)
+```
+
+```{r}
+top_vars <- predictors(rfe_result)
+
+kable(top_vars)
+```
