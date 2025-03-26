@@ -1,0 +1,117 @@
+---
+title: "Final Dataset Script"
+author: "Andrew Henderson"
+date: "2025-03-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(readr)
+```
+
+
+```{r}
+transfer_data <- read_csv("final_transfer_renamed.csv")
+
+# Add binary columns for each position
+transfer_data <- transfer_data |>
+  mutate(
+    Forward = if_else(str_detect(Position, "FW"), 1L, 0L),
+    Midfielder = if_else(str_detect(Position, "MF"), 1L, 0L),
+    Defender = if_else(str_detect(Position, "DF"), 1L, 0L)
+  )
+
+transfer_data
+```
+```{r}
+transfer_data <- transfer_data |>
+  mutate(
+    prog_pass_ratio = if_else(
+      Total_Pass_Distance_Towards_Opp_Goal > 0,
+      Progressive_Passes / Total_Pass_Distance_Towards_Opp_Goal,
+      NA_real_
+    ),
+    prog_carry_dist_ratio = if_else(
+      tot_carry_distance > 0,
+      prog_carry_distance / tot_carry_distance,
+      NA_real_
+    ),
+    prog_carry_count_ratio = if_else(
+      tot_carry_distance > 0,
+      prog_carries / tot_carry_distance,
+      NA_real_
+    ),
+    tackle_success_rate = if_else(
+      Tackles_Total > 0,
+      Tackles_Won / Tackles_Total,
+      NA_real_
+    ),
+    aerial_win_loss_ratio = if_else(
+      Aerials_Lost > 0,
+      Aerials_Won / Aerials_Lost,
+      NA_real_
+    ),
+  )
+```
+
+```{r}
+transfer_data
+```
+
+```{r}
+transfer_data <- transfer_data |>
+  select(
+    player,
+    matches_played,
+    minutes,
+    matches_played_starter,
+    matches_played_sub,
+    matches_no_play,
+    raw_goals,
+    raw_assists,
+    raw_goals_and_assists,
+    raw_nonpenaltykick_goal,
+    total_pass_attempts,
+    Total_Cmp.,
+    Total_Passes_Leading_to_Shot,
+    Cmp_Passes_18_yard_box,
+    Progressive_Passes,
+    tot_carry_distance,
+    Total_Pass_Distance_Towards_Opp_Goal,
+    prog_pass_ratio,
+    prog_carry_dist_ratio,
+    prog_carry_count_ratio,
+    aerial_win_loss_ratio,
+    Shot_Creating_Actions,
+    def_action_to_shot,
+    takeon_to_goal,
+    tot_carry_distance,
+    prog_carry_distance,
+    prog_carries,
+    Progressive_Passes_Received,
+    TakeOn_Attempts,
+    TakeOn_Success_Percentage,
+    Tackles_Total,
+    Tackles_Won,
+    tackle_success_rate,
+    Interceptions,
+    Clearances,
+    Aerials_Won,
+    Aerials_Lost,
+    Aerial_Win_Percentage,
+    Forward,
+    Midfielder,
+    Defender
+  )
+```
+
+```{r}
+transfer_data
+```
+
