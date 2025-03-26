@@ -42,6 +42,7 @@ Added: Binary Columns for each Position \~
 3.  DF: Defender
 
 ```{r}
+## ANDREW ###
 transfers90 <- transfers90 %>%
   select(-c(X, nation, team, comp, minutes, minutes_by_90)) %>%
   mutate(MF = ifelse(grepl("MF", Position), 1,0),
@@ -159,3 +160,37 @@ top_vars <- predictors(rfe_result)
 
 kable(top_vars)
 ```
+
+## Interaction Exploration
+
+Forward
+
+-   Raw Goals and Assists
+
+-   Shot Creating Action
+
+-   Progressive Passes Received
+
+-   Shots Leading to Another Shot
+
+Midfield
+
+-   Passes Leading to Shot
+
+-   Passes in Final Third of Pitch
+
+-   Progressive Passes
+
+-   Tackles Total
+
+Defender
+
+-   Defensive Actions Leading to Shot
+
+-   Blocked Shots
+
+-   Blocked Passes
+
+-   Tackles + Interceptions
+
+-   Clearances
