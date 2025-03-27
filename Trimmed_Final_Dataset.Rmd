@@ -33,8 +33,8 @@ transfer_data
 transfer_data <- transfer_data |>
   mutate(
     prog_pass_ratio = if_else(
-      Total_Pass_Distance_Towards_Opp_Goal > 0,
-      Progressive_Passes / Total_Pass_Distance_Towards_Opp_Goal,
+      Progressive_Passes > 0,
+      Total_Pass_Distance_Towards_Opp_Goal / Progressive_Passes,
       NA_real_
     ),
     prog_carry_dist_ratio = if_else(
@@ -42,9 +42,9 @@ transfer_data <- transfer_data |>
       prog_carry_distance / tot_carry_distance,
       NA_real_
     ),
-    prog_carry_count_ratio = if_else(
-      tot_carry_distance > 0,
-      prog_carries / tot_carry_distance,
+    progression_by_carry = if_else(
+      carries > 0,
+      prog_carry_distance / carries,
       NA_real_
     ),
     tackle_success_rate = if_else(
@@ -52,22 +52,21 @@ transfer_data <- transfer_data |>
       Tackles_Won / Tackles_Total,
       NA_real_
     ),
-    aerial_win_loss_ratio = if_else(
+    aerial_attempts = if_else(
       Aerials_Lost > 0,
-      Aerials_Won / Aerials_Lost,
+      Aerials_Won + Aerials_Lost,
       NA_real_
     ),
   )
 ```
 
-```{r}
-transfer_data
-```
 
 ```{r}
-transfer_data <- transfer_data |>
+final_transfer_data <- transfer_data |>
   select(
     player,
+    transfer,
+    season,
     matches_played,
     minutes,
     matches_played_starter,
@@ -86,7 +85,7 @@ transfer_data <- transfer_data |>
     Total_Pass_Distance_Towards_Opp_Goal,
     prog_pass_ratio,
     prog_carry_dist_ratio,
-    prog_carry_count_ratio,
+    progression_by_carry,
     aerial_win_loss_ratio,
     Shot_Creating_Actions,
     def_action_to_shot,
@@ -102,9 +101,8 @@ transfer_data <- transfer_data |>
     tackle_success_rate,
     Interceptions,
     Clearances,
-    Aerials_Won,
-    Aerials_Lost,
     Aerial_Win_Percentage,
+    aerial_attempts,
     Forward,
     Midfielder,
     Defender
@@ -112,6 +110,10 @@ transfer_data <- transfer_data |>
 ```
 
 ```{r}
-transfer_data
+final_transfer_data
+```
+
+```{r}
+write_csv(final_transfer_data, "MODELING_DATA.csv")
 ```
 
