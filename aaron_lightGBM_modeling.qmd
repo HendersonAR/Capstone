@@ -1,0 +1,61 @@
+---
+title: "Gradient Boosting Soccer Analysis"
+format: pdf
+editor: visual
+---
+
+```{r}
+install.packages("lightgbm")
+install.packages("caret")
+library(caret)
+library(lightgbm)
+```
+
+```{r}
+data <- read.csv("transfer_dataset.csv")
+cleaned_data <- na.omit(data)
+
+```
+
+```{r}
+set.seed(278)
+trainingIndex <- createDataPartition(cleaned_data$transfer, p = 0.8, list = FALSE)
+train_data <- cleaned_data[trainingIndex,]
+test_data <- cleaned_data[-trainingIndex, ]
+```
+
+```{r}
+lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(train_data), "transfer")]), label = train_data$transfer)
+lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "transfer")]), label = test_data$transfer)
+```
+
+```{r}
+parameters <- list(
+  objective = "binary",
+  boosting_type = "gbdt",
+  learning_rate = 0.075,
+  num_leaves = 100
+)
+```
+
+```{r}
+gbm_model <- lgb.train(
+  params = parameters,
+  data = lgbtrain,
+  nrounds = 100,
+  valids = list(test = lgbtest),
+  early_stopping_rounds = 10
+)
+```
+
+```{r}
+predictions <- predict(gbm_model,
+                       as.matrix(test_data[,setdiff(names(test_data),
+                                                    "transfer")]), label =
+                         test_data$transfer)
+summary(predictions)
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+
+accuracy <- mean(binary_predictions == test_data$transfer)
+cat("Accuracy:", accuracy, "\n")
+```
