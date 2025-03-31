@@ -25,8 +25,8 @@ test_data <- cleaned_data[-trainingIndex, ]
 ```
 
 ```{r}
-lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(train_data), "label")]), label = train_data$transfer)
-lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "label")]), label = test_data$transfer)
+lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(train_data), "transfer")]), label = train_data$transfer)
+lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "transfer")]), label = test_data$transfer)
 ```
 
 ```{r}
@@ -51,12 +51,11 @@ gbm_model <- lgb.train(
 ```{r}
 predictions <- predict(gbm_model,
                        as.matrix(test_data[,setdiff(names(test_data),
-                                                    "label")]), label =
+                                                    "transfer")]), label =
                          test_data$transfer)
 summary(predictions)
 binary_predictions <- ifelse(predictions > 0.5, 1, 0)
 
 accuracy <- mean(binary_predictions == test_data$transfer)
 cat("Accuracy:", accuracy, "\n")
-# why is the model perfect. bruh.
 ```
