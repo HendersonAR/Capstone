@@ -1,0 +1,9 @@
+---
+title: "Gradient Boosting Soccer Analysis"
+format: pdf
+editor: visual
+---
+
+```{r}
+install.packages("lightgbm")
+```
