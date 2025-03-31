@@ -1,0 +1,136 @@
+---
+title: "Random Forest, Visuals"
+author: "Andrew Henderson"
+date: "2025-03-31"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+if (!require(randomForest)) install.packages("randomForest", dependencies = TRUE)
+if (!require(caret)) install.packages("caret", dependencies = TRUE)
+
+library(randomForest)
+library(caret)
+```
+
+```{r}
+data <- read.csv("transfer_dataset.csv", stringsAsFactors = T)
+```
+
+```{r}
+str(data)
+summary(data)
+
+data$transfer <- as.factor(data$transfer)
+data$MF <- as.factor(data$MF)
+data$DF <- as.factor(data$DF)
+data$FW <- as.factor(data$FW)
+
+data <- na.omit(data)
+```
+
+```{r}
+set.seed(82)
+trainIndex <- createDataPartition(data$transfer, p = 0.7, list = FALSE)
+trainData <- data[trainIndex, ]
+testData <- data[-trainIndex, ]
+
+```
+
+```{r}
+rf_model <- randomForest(transfer ~ . - season - player, 
+                         data = trainData, 
+                         ntree = 500,                            
+                         mtry = floor(sqrt(ncol(trainData) - 1)),
+                         importance = TRUE)
+```
+
+```{r}
+print(rf_model)
+```
+```{r}
+predictions <- predict(rf_model, testData)
+```
+
+
+```{r}
+confMat <- confusionMatrix(predictions, testData$transfer)
+print(confMat)
+```
+```{r}
+varImpPlot(rf_model)
+
+```
+
+Random Forest Models / Position
+
+```{r}
+positions <- c("MF", "FW", "DF")
+
+models <- list()
+conf_matrices <- list()
+
+for (pos in positions) {
+  
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !(names(pos_data) %in% c("season", "player", "MD", "FW", "DF"))]
+  pos_data$transfer <- as.factor(pos_data$transfer)
+  
+  if(nrow(pos_data) < 10) {
+    cat("Not enough data for position", pos, "\n")
+    next
+  }
+   set.seed(42)
+   
+  trainIndex <- createDataPartition(pos_data$transfer, p = 0.7, list = FALSE)
+  trainData <- pos_data[trainIndex, ]
+  testData <- pos_data[-trainIndex, ]
+  
+  # Random Forest model
+  rf_model <- randomForest(transfer ~ ., 
+                           data = trainData, 
+                           ntree = 500, 
+                           mtry = floor(sqrt(ncol(trainData) - 1)), 
+                           importance = TRUE)
+  
+  models[[pos]] <- rf_model
+  
+  # Predictions on the test set
+  predictions <- predict(rf_model, testData)
+  
+  # Evaluate the model performance
+  conf_mat <- confusionMatrix(predictions, testData$transfer)
+  conf_matrices[[pos]] <- conf_mat
+  
+  cat("Confusion Matrix for", pos, "players:\n")
+  print(conf_mat)
+  cat("\n---------------------------------\n")
+}
+```
+
+```{r}
+#MF players:
+cat("Model summary for MF players:\n")
+print(models[["MF"]])
+plot(models[["MF"]], main = "OOB Error for MD Players")
+varImpPlot(models[["MF"]], main = "Variable Importance for MD Players")
+
+#FW players:
+cat("Model summary for FW players:\n")
+print(models[["FW"]])
+plot(models[["FW"]], main = "OOB Error for FW Players")
+varImpPlot(models[["FW"]], main = "Variable Importance for FW Players")
+
+
+#DF players:
+cat("Model summary for DF players:\n")
+print(models[["DF"]])
+plot(models[["DF"]], main = "OOB Error for DF Players")
+varImpPlot(models[["DF"]], main = "Variable Importance for DF Players")
+
+```
+
