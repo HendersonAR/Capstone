@@ -18,7 +18,7 @@ cleaned_data <- na.omit(data)
 
 ```{r}
 set.seed(278)
-trainingIndex <- createDataPartition(cleaned_data$transfer, p = 0.8, list = FALSE)
+trainingIndex <- createDataPartition(cleaned_data$transfer, p = 0.7, list = FALSE)
 train_data <- cleaned_data[trainingIndex,]
 test_data <- cleaned_data[-trainingIndex, ]
 train_data <- train_data[, setdiff(names(train_data), "name")]
@@ -33,9 +33,11 @@ lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "t
 ```{r}
 parameters <- list(
   objective = "binary",
+  metric = "auc",
+  scale_pos_weight = sum(train_data$transfer == 0) / sum(train_data$transfer == 1),
   boosting_type = "gbdt",
   learning_rate = 0.05,
-  num_leaves = 75
+  num_leaves = 31
 )
 ```
 
