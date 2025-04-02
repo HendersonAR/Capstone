@@ -1,0 +1,188 @@
+---
+title: "Gradient Boosting Soccer Analysis"
+format: pdf
+editor: visual
+---
+
+```{r}
+library(caret)
+library(lightgbm)
+library(ggplot2)
+```
+
+```{r}
+data <- read.csv("transfer_dataset.csv")
+cleaned_data <- na.omit(data)
+
+```
+
+```{r}
+set.seed(278)
+trainingIndex <- createDataPartition(cleaned_data$transfer, p = 0.8, list = FALSE)
+train_data <- cleaned_data[trainingIndex,]
+test_data <- cleaned_data[-trainingIndex, ]
+train_data <- train_data[, setdiff(names(train_data), "name")]
+test_data <- test_data[, setdiff(names(test_data), "name")]
+```
+
+```{r}
+lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(train_data), "transfer")]), label = train_data$transfer)
+lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "transfer")]), label = test_data$transfer)
+```
+
+```{r}
+parameters <- list(
+  objective = "binary",
+  boosting_type = "gbdt",
+  learning_rate = 0.05,
+  num_leaves = 75
+)
+```
+
+```{r}
+gbm_model <- lgb.train(
+  params = parameters,
+  data = lgbtrain,
+  nrounds = 100,
+  valids = list(test = lgbtest),
+  early_stopping_rounds = 10
+)
+# try class_weight = balanced?
+```
+
+```{r}
+predictions <- predict(gbm_model,
+                       as.matrix(test_data[,setdiff(names(test_data),
+                                                    "transfer")]), label =
+                         test_data$transfer)
+summary(predictions)
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+
+accuracy <- mean(binary_predictions == test_data$transfer)
+cat("Accuracy:", accuracy, "\n")
+```
+
+Model Statistics
+
+```{r}
+if (!require(knitr)) install.packages("knitr")
+library(knitr)
+
+# Binary predictions from the model
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+
+# Compute confusion matrix
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
+# Extract relevant metrics
+accuracy <- conf_matrix$overall["Accuracy"]
+precision <- conf_matrix$byClass["Precision"]
+recall <- conf_matrix$byClass["Recall"]
+f1_score <- conf_matrix$byClass["F1"]
+kappa <- conf_matrix$overall["Kappa"]
+
+# Create a data frame for the metrics
+metrics_df <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "F1-Score", "Kappa"),
+  Value = c(accuracy, precision, recall, f1_score, kappa)
+)
+
+# Use kable to create a formatted table
+kable(metrics_df, col.names = c("Metric", "Value"), caption = "Model Evaluation Metrics")
+```
+
+Visualization
+
+```{r}
+library(pROC)
+```
+
+```{r}
+roc_obj <- roc(test_data$transfer, predictions)
+
+roc_data <- data.frame(TPR = roc_obj$sensitivities,
+  FPR = 1 - roc_obj$specificities,
+  Thresholds = roc_obj$thresholds
+)
+roc_g <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "blue") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "ROC Curve", x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal()
+
+roc_g
+
+```
+
+Precision-Recall Curve
+
+```{r}
+# Calculate Precision and Recall
+thresholds <- seq(0, 1, by = 0.01)
+precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(predicted_labels)
+})
+recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+pr_curve_g <- plot(recall, precision, type = "l", col = "red", main = "Precision-Recall Curve",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+pr_curve_g
+```
+
+```{r}
+
+# Create Confusion Matrix
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
+# Plot Confusion Matrix
+library(ggplot2)
+conf_df <- as.data.frame(conf_matrix$table)
+conf_df$Prediction <- factor(conf_df$Prediction, levels = c(0, 1),
+                             labels = c("no transfer", "transferred"))
+conf_df$Reference <- factor(conf_df$Reference, levels = c(0,1),
+                            labels = c("no transfer", "tranferred"))
+conf_matrix_g <- ggplot(data = conf_df, aes(x = Reference, y = Prediction)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  geom_text(aes(label = Freq)) +
+  theme_minimal() +
+  labs(title = "LightGbm Confusion Matrix", fill = "Frequency",
+       x = "Actual Status", y = "Predicted Status")
+
+conf_matrix_g
+```
+
+```{r}
+importance <- lgb.importance(gbm_model)
+importance_df <- as.data.frame(importance)
+
+variable_importance_g <- ggplot(importance_df, aes(x = reorder(Feature, Gain),
+                                                   y = Gain)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Feature Importance", x = "Feature",
+       y = "Gain (Improvement in Log Loss When Splitting)")
+
+variable_importance_g
+```
+
+Save Plots
+
+```{r}
+ggsave("lightgbm_roc.png", plot = roc_g, width = 8, height = 6, bg = "white")
+ggsave("lightgbm_pr_curve.png", plot = pr_curve_g, width = 8, height = 6,
+       bg = "white")
+ggsave("lightgbm_conf_matrix.png", plot = conf_matrix_g, width = 8, height = 6,
+       bg = "white")
+ggsave("lightgbm_var_import.png", plot = variable_importance_g, width = 8, 
+       height = 6, bg = "white")
+```
