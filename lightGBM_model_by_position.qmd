@@ -1,0 +1,57 @@
+---
+title: "lightGBM_by_position"
+format: pdf
+editor: visual
+---
+
+```{r}
+library(caret)
+library(lightgbm)
+library(ggplot2)
+```
+
+```{r}
+data <- read.csv("transfer_dataset.csv")
+cleaned_data <- na.omit(data)
+fw_data <- cleaned_data[cleaned_data$FW == 1,]
+mf_data <- cleaned_data[cleaned_data$MF == 1,]
+df_data <- cleaned_data[cleaned_data$DF == 1,]
+```
+
+```{r}
+# forward model
+set.seed(278)
+trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
+fw_train_data <- cleaned_data[trainingIndex,]
+fw_test_data <- cleaned_data[-trainingIndex, ]
+fw_train_data <- train_data[, setdiff(names(train_data), "name")]
+fw_test_data <- test_data[, setdiff(names(test_data), "name")]
+```
+
+```{r}
+fw_lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(fw_train_data), "transfer")]), label = fw_train_data$transfer, 
+                           free_raw_data = FALSE)
+fw_lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(fw_test_data), "transfer")]), label = fw_test_data$transfer)
+```
+
+```{r}
+parameters <- list(
+  objective = "binary",
+  metric = "auc",
+  scale_pos_weight = sum(train_data$transfer == 0) / sum(train_data$transfer == 1),
+  boosting_type = "gbdt",
+  learning_rate = 0.05,
+  num_leaves = 31
+)
+# TRY CLASS_WEIGHT = "balanced"
+```
+
+```{r}
+gbm_model <- lgb.train(
+  params = parameters,
+  data = fw_lgbtrain,
+  nrounds = 100,
+  valids = list(test = lgbtest),
+  early_stopping_rounds = 10
+)
+```
