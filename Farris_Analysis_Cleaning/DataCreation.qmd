@@ -1,0 +1,321 @@
+---
+title: "Dataset Creation"
+format: html
+editor: visual
+---
+
+```{r message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(tidyr)
+```
+
+# Transfer Dataset
+
+<https://www.kaggle.com/datasets/mexwell/football-transfer-dataset?resource=download>
+
+## Find Team Names for France1, Italy2, and England2
+
+```{r}
+transfers_full <- read.csv("transfers.csv")
+transfers_full <- transfers_full %>%
+  filter(season >= 2018) %>%
+  filter(dir == "in")
+
+team_names <- transfers_full %>%
+  filter(season == "2018") %>%
+  filter(counter_team_country == "Italy") 
+
+sort(unique(team_names$counter_team_name))
+
+```
+
+```{r}
+# lower league: italy 2(Serie B)
+
+it2_2021 <- c("Ascoli Calcio","Brescia Calcio", "Chievo Verona", 
+              "AS Cittadella", "Cosenza Calcio",
+              "US Cremonese",  "Empoli FC",
+              "Frosinone Calcio","US Lecce", "AC Monza",
+              "Delfino Pescara 1936", "AC Pisa 1909", 
+              "Pordenone Calcio", "US Salernitana 1919", "SPAL",
+              "Trapani Calcio", "Venezia FC")
+
+it2_2020 <- c("Ascoli Calcio", "Chievo Verona", 
+              "AS Cittadella", "Cosenza Calcio",
+              "US Cremonese", "FC Crotone", "Empoli FC",
+              "Frosinone Calcio",
+              "AC Perugia Calcio", "Delfino Pescara 1936",
+              "AC Pisa 1909", "US Salernitana 1919", "Spezia Calcio",
+              "Trapani Calcio", "Venezia FC")
+
+it2_2019 <- c("Brescia Calcio", "Carpi FC 1909",
+              "AS Cittadella", "Cosenza Calcio", "FC Crotone",
+              "Hellas Verona", "Calcio Padova", "SSD Palermo",
+              "AC Perugia Calcio", "Delfino Pescara 1936",
+              "US Salernitana 1919", "Spezia Calcio",
+              "Venezia FC")
+
+
+```
+
+```{r}
+# lower league: england 2 (English Championship)
+
+
+gb2_2021 <- c("Barnsley FC", "Birmingham City", "Blackburn Rovers",
+              "AFC Bournemouth", "Brentford FC", "Bristol City", 
+              "Cardiff City", "Coventry City",
+              "Derby County", "Huddersfield Town","Luton Town",
+              "Middlesbrough FC", "Millwall FC", "Norwich City",
+              "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "Watford FC")
+
+gb2_2020 <- c("Barnsley FC", "Birmingham City", "Blackburn Rovers",
+              "Brentford FC", "Bristol City", "Cardiff City",
+              "Charlton Athletic", "Derby County", "Fulham FC",
+              "Huddersfield Town" , "Hull City", 
+              "Leeds United","Luton Town" ,
+              "Middlesbrough FC", "Millwall FC",
+              "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "West Bromwich Albion", "Wigan Athletic")
+
+gb2_2019 <- c("Aston Villa", "Birmingham City", "Blackburn Rovers",
+              "Bolton Wanderers","Brentford FC", "Bristol City",
+              "Derby County", "Hull City", "Ipswich Town",
+              "Leeds United", "Middlesbrough FC", "Millwall FC",
+              "Norwich City", "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Rotherham United", "Sheffield United", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "West Bromwich Albion", "Wigan Athletic")
+
+```
+
+```{r}
+# lower leage: france 1 (Ligue 1)
+
+fr1_2021 <- c("SCO Angers", "FC Girondins Bordeaux",
+              "Stade Brestois 29", "Dijon FCO", "RC Lens" ,
+              "LOSC Lille", "FC Lorient", "Olympique Lyon", 
+              "Olympique Marseille", "FC Metz", "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace")
+
+fr1_2020 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "Stade Brestois 29", "Dijon FCO",  "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille", "FC Metz",
+              "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace", "FC Toulouse")
+
+fr1_2019 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "SM Caen", "Dijon FCO", "EA Guingamp", "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille", "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace", "FC Toulouse")
+
+fr1_2018 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "SM Caen", "Dijon FCO", "EA Guingamp", "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille","FC Metz",
+              "AS Monaco", "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Paris Saint-Germain", "Stade Rennais FC", 
+              "AS Saint-Étienne", "RC Strasbourg Alsace", "FC Toulouse",
+              'ESTAC Troyes')              
+              
+```
+
+## Combine Teams by Year
+
+```{r}
+
+ll_2018 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "SM Caen", "Dijon FCO", "EA Guingamp", "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille","FC Metz",
+              "AS Monaco", "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Paris Saint-Germain", "Stade Rennais FC", 
+              "AS Saint-Étienne", "RC Strasbourg Alsace", "FC Toulouse",
+              'ESTAC Troyes')
+
+ll_2019 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "SM Caen", "Dijon FCO", "EA Guingamp", "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille", "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace", "FC Toulouse", "Aston Villa",
+              "Birmingham City", "Blackburn Rovers",
+              "Bolton Wanderers","Brentford FC", "Bristol City",
+              "Derby County", "Hull City", "Ipswich Town",
+              "Leeds United", "Middlesbrough FC", "Millwall FC",
+              "Norwich City", "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Rotherham United", "Sheffield United", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "West Bromwich Albion", "Wigan Athletic", "Brescia Calcio", "Carpi FC 1909",
+              "AS Cittadella", "Cosenza Calcio", "FC Crotone",
+              "Hellas Verona", "Calcio Padova", "SSD Palermo",
+              "AC Perugia Calcio", "Delfino Pescara 1936",
+              "US Salernitana 1919", "Spezia Calcio",
+              "Venezia FC")
+
+ll_2020 <- c("Amiens SC","SCO Angers", "FC Girondins Bordeaux",
+              "Stade Brestois 29", "Dijon FCO",  "LOSC Lille",
+              "Olympique Lyon", "Olympique Marseille", "FC Metz",
+              "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace", "FC Toulouse", "Barnsley FC", 
+             "Birmingham City", "Blackburn Rovers",
+              "Brentford FC", "Bristol City", "Cardiff City",
+              "Charlton Athletic", "Derby County", "Fulham FC",
+              "Huddersfield Town" , "Hull City", 
+              "Leeds United","Luton Town" ,
+              "Middlesbrough FC", "Millwall FC",
+              "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "West Bromwich Albion", "Wigan Athletic", "Ascoli Calcio", "Chievo Verona", 
+              "AS Cittadella", "Cosenza Calcio",
+              "US Cremonese", "FC Crotone", "Empoli FC",
+              "Frosinone Calcio",
+              "AC Perugia Calcio", "Delfino Pescara 1936",
+              "AC Pisa 1909", "US Salernitana 1919", "Spezia Calcio",
+              "Trapani Calcio", "Venezia FC")
+
+ll_2021 <- c("SCO Angers", "FC Girondins Bordeaux",
+              "Stade Brestois 29", "Dijon FCO", "RC Lens" ,
+              "LOSC Lille", "FC Lorient", "Olympique Lyon", 
+              "Olympique Marseille", "FC Metz", "AS Monaco",
+              "Montpellier HSC", "FC Nantes", "OGC Nice",
+              "Nîmes Olympique", "Paris Saint-Germain", "Stade Reims",
+              "Stade Rennais FC", "AS Saint-Étienne", 
+              "RC Strasbourg Alsace", "Barnsley FC", "Birmingham City", "Blackburn Rovers",
+              "AFC Bournemouth", "Brentford FC", "Bristol City", 
+              "Cardiff City", "Coventry City",
+              "Derby County", "Huddersfield Town","Luton Town",
+              "Middlesbrough FC", "Millwall FC", "Norwich City",
+              "Nottingham Forest", "Preston North End",
+              "Queens Park Rangers", "Reading FC", 
+              "Sheffield Wednesday", "Stoke City", "Swansea City",
+              "Watford FC", "Ascoli Calcio","Brescia Calcio", "Chievo Verona", 
+              "AS Cittadella", "Cosenza Calcio",
+              "US Cremonese",  "Empoli FC",
+              "Frosinone Calcio","US Lecce", "AC Monza",
+              "Delfino Pescara 1936", "AC Pisa 1909", 
+              "Pordenone Calcio", "US Salernitana 1919", "SPAL",
+              "Trapani Calcio", "Venezia FC")
+
+```
+
+## Create Final Transfer Dataset
+
+```{r}
+full_transfers <- read.csv("transfers.csv") 
+```
+
+```{r}
+full_transfers <- full_transfers %>%
+  filter(team_country %in% c("Spain", "Germany", "Italy", "England"))
+```
+
+```{r}
+trans_17_18 <- full_transfers %>%
+  filter(season == "2018") %>%
+  filter(dir == "in") %>%
+  filter(counter_team_name %in% ll_2018) %>%
+  mutate(Season = "2017-2018")
+
+trans_18_19 <- full_transfers %>%
+  filter(season == "2019") %>%
+  filter(dir == "in") %>%
+  filter(counter_team_name %in% ll_2019) %>%
+  mutate(Season = "2018-2019")
+
+trans_19_20 <- full_transfers %>%
+  filter(season == "2020") %>%
+  filter(dir == "in") %>%
+  filter(counter_team_name %in% ll_2020) %>%
+  mutate(Season = "2019-2020")
+
+trans_20_21 <- full_transfers %>%
+  filter(season == "2021") %>%
+  filter(dir == "in") %>%
+  filter(counter_team_name %in% ll_2020) %>%
+  mutate(Season = "2020-2021")
+```
+
+```{r}
+combined_transfers <- bind_rows(trans_17_18,
+                                trans_18_19,
+                                trans_19_20,
+                                trans_20_21) %>%
+  select(player_name, player_age, Season) %>%
+  mutate(Transfer = 1) %>%
+  rename(player = player_name) %>%
+  rename(season = Season) %>%
+  rename(age = player_age)
+```
+
+------------------------------------------------------------------------
+
+## Export Kaggle Dataset
+
+```{r}
+write.csv(combined_transfers, file = 'simple_transfers.csv')
+```
+
+------------------------------------------------------------------------
+
+## Import Stathead Datasets
+
+```{r}
+fr1 <- read.csv("FRA1.csv") %>%
+  filter(season %in% c('2017-2018', '2018-2019', '2019-2020', '2020-2021'))
+eng2 <- read.csv("ENG2.csv") %>%
+  filter(season %in% c('2018-2019', '2019-2020', '2020-2021'))
+ita2 <- read.csv("ITA2.csv") %>%
+  filter(season %in% c('2018-2019', '2019-2020', '2020-2021'))
+
+combined_stathead <- bind_rows(fr1, eng2, ita2)
+```
+
+## Export LL Dataset
+
+```{r}
+write.csv(combined_stathead, "ll_stathead.csv")
+```
+
+------------------------------------------------------------------------
+
+## Create Final Combined Dataset
+
+```{r}
+final_dataset <- full_join(combined_transfers, combined_stathead, by = c("player", "season"),
+                           relationship = "many-to-many") %>%
+  mutate(age.x = coalesce(age.x,age.y)) %>%
+  rename(age = age.x) %>%
+  rename(transfer = Transfer) %>%
+  filter(!is.na(rk)) %>%
+  mutate(transfer = replace_na(transfer,0))
+```
+
+## Export Final Dataset
+
+```{r}
+write.csv(final_dataset, 'transfer_dataset_final.csv')
+```
+
+------------------------------------------------------------------------
