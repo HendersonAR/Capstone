@@ -24,34 +24,130 @@ set.seed(278)
 trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
 fw_train_data <- cleaned_data[trainingIndex,]
 fw_test_data <- cleaned_data[-trainingIndex, ]
-fw_train_data <- train_data[, setdiff(names(train_data), "name")]
-fw_test_data <- test_data[, setdiff(names(test_data), "name")]
+fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
+fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
 ```
 
 ```{r}
-fw_lgbtrain <- lgb.Dataset(data = as.matrix(train_data[, setdiff(names(fw_train_data), "transfer")]), label = fw_train_data$transfer, 
+fw_lgbtrain <- lgb.Dataset(data = as.matrix(fw_train_data[, setdiff(names(fw_train_data), "transfer")]), label = fw_train_data$transfer, 
                            free_raw_data = FALSE)
-fw_lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(fw_test_data), "transfer")]), label = fw_test_data$transfer)
+fw_lgbtest <- lgb.Dataset(data = as.matrix(fw_test_data[, setdiff(names(fw_test_data), "transfer")]), label = fw_test_data$transfer)
 ```
 
 ```{r}
 parameters <- list(
   objective = "binary",
   metric = "auc",
-  scale_pos_weight = sum(train_data$transfer == 0) / sum(train_data$transfer == 1),
+  scale_pos_weight = sum(fw_train_data$transfer == 0) / 
+    sum(fw_train_data$transfer == 1),
   boosting_type = "gbdt",
   learning_rate = 0.05,
-  num_leaves = 31
+  num_leaves = 31,
+  class_weight = "balanced"
 )
 # TRY CLASS_WEIGHT = "balanced"
 ```
 
 ```{r}
-gbm_model <- lgb.train(
+fw_gbm_model <- lgb.train(
   params = parameters,
   data = fw_lgbtrain,
   nrounds = 100,
-  valids = list(test = lgbtest),
+  valids = list(test = fw_lgbtest),
   early_stopping_rounds = 10
 )
+```
+
+```{r}
+fw_predictions <- predict(gbm_model,
+                       as.matrix(fw_test_data[,setdiff(names(fw_test_data),
+                                                    "transfer")]), label =
+                         fw_test_data$transfer)
+summary(fw_predictions)
+fw_binary_predictions <- ifelse(fw_predictions > 0.5, 1, 0)
+
+accuracy <- mean(fw_binary_predictions == fw_test_data$transfer)
+cat("Accuracy:", accuracy, "\n")
+```
+
+```{r}
+if (!require(knitr)) install.packages("knitr")
+library(knitr)
+
+# Compute confusion matrix
+fw_conf_matrix <- confusionMatrix(factor(fw_binary_predictions),
+                               factor(fw_test_data$transfer))
+
+# Extract relevant metrics
+fw_accuracy <- fw_conf_matrix$overall["Accuracy"]
+fw_precision <- fw_conf_matrix$byClass["Precision"]
+fw_recall <- fw_conf_matrix$byClass["Recall"]
+fw_f1_score <- fw_conf_matrix$byClass["F1"]
+fw_kappa <- fw_conf_matrix$overall["Kappa"]
+
+# Create a data frame for the metrics
+fw_metrics_df <- data.frame(
+  Value = c(fw_accuracy, fw_precision, fw_recall, fw_f1_score, fw_kappa)
+)
+
+# Use kable to create a formatted table
+kable(fw_metrics_df, caption = "Model Evaluation Metrics")
+```
+
+```{r}
+library(pROC)
+
+fw_roc_obj <- roc(fw_test_data$transfer, fw_predictions)
+
+fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
+  FPR = 1 - fw_roc_obj$specificities,
+  Thresholds = fw_roc_obj$thresholds
+)
+roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "blue") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "ROC Curve", x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal()
+
+roc_g
+```
+
+```{r}
+# Calculate Precision and Recall
+thresholds <- seq(0, 1, by = 0.01)
+fw_precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(fw_predictions > thresh, 1, 0)
+  sum(predicted_labels & fw_test_data$transfer) / sum(predicted_labels)
+})
+fw_recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(fw_predictions > thresh, 1, 0)
+  sum(predicted_labels & fw_test_data$transfer) / sum(fw_test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+pr_curve_g <- plot(recall, precision, type = "l", col = "red", main = "Precision-Recall Curve",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+pr_curve_g
+```
+
+```{r}
+fw_conf_matrix <- confusionMatrix(factor(fw_binary_predictions),
+                               factor(fw_test_data$transfer))
+
+# Plot Confusion Matrix
+library(ggplot2)
+fw_conf_df <- as.data.frame(fw_conf_matrix$table)
+fw_conf_df$Prediction <- factor(fw_conf_df$Prediction, levels = c(0, 1),
+                             labels = c("no transfer", "transferred"))
+fw_conf_df$Reference <- factor(fw_conf_df$Reference, levels = c(0,1),
+                            labels = c("no transfer", "tranferred"))
+fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Reference, y = Prediction)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  geom_text(aes(label = Freq)) +
+  theme_minimal() +
+  labs(title = "LightGbm Confusion Matrix", fill = "Frequency",
+       x = "Actual Status", y = "Predicted Status")
+
+fw_conf_matrix_g
 ```
