@@ -5,6 +5,7 @@ editor: visual
 ---
 
 ```{r}
+library(ggplot2)
 library(caret)
 library(lightgbm)
 library(ggplot2)
@@ -18,12 +19,14 @@ mf_data <- cleaned_data[cleaned_data$MF == 1,]
 df_data <- cleaned_data[cleaned_data$DF == 1,]
 ```
 
+**Forward Model**
+
 ```{r}
 # forward model
 set.seed(278)
-trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
-fw_train_data <- cleaned_data[trainingIndex,]
-fw_test_data <- cleaned_data[-trainingIndex, ]
+fw_trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
+fw_train_data <- fw_data[trainingIndex,]
+fw_test_data <- fw_data[-trainingIndex, ]
 fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
 fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
 ```
@@ -42,10 +45,9 @@ parameters <- list(
     sum(fw_train_data$transfer == 1),
   boosting_type = "gbdt",
   learning_rate = 0.05,
-  num_leaves = 31,
-  class_weight = "balanced"
+  num_leaves = 31
+  #class_weight = "balanced"
 )
-# TRY CLASS_WEIGHT = "balanced"
 ```
 
 ```{r}
@@ -59,7 +61,7 @@ fw_gbm_model <- lgb.train(
 ```
 
 ```{r}
-fw_predictions <- predict(gbm_model,
+fw_predictions <- predict(fw_gbm_model,
                        as.matrix(fw_test_data[,setdiff(names(fw_test_data),
                                                     "transfer")]), label =
                          fw_test_data$transfer)
@@ -106,7 +108,8 @@ fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
 roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "ROC Curve", x = "False Positive Rate", y = "True Positive Rate") +
+  labs(title = "ROC Curve - Forwards",
+       x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal()
 
 roc_g
@@ -146,8 +149,35 @@ fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Reference, y = Prediction)
   scale_fill_gradient(low = "blue", high = "red") +
   geom_text(aes(label = Freq)) +
   theme_minimal() +
-  labs(title = "LightGbm Confusion Matrix", fill = "Frequency",
+  labs(title = "Confusion Matrix - Forwards", fill = "Frequency",
        x = "Actual Status", y = "Predicted Status")
 
 fw_conf_matrix_g
+```
+
+```{r}
+fw_importance <- lgb.importance(fw_gbm_model)
+fw_importance_df <- as.data.frame(fw_importance)
+
+fw_variable_importance_g <- ggplot(fw_importance_df,
+                                   aes(x = reorder(Feature, Gain),
+                                                   y = Gain)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Feature Importance", x = "Feature",
+       y = "Gain (Improvement in Log Loss When Splitting)")
+
+fw_variable_importance_g
+```
+
+**Midfield Model**
+
+```{r}
+set.seed(278)
+trainingIndex <- createDataPartition(mf_data$transfer, p = 0.7, list = FALSE)
+mf_train_data <- mf_data[trainingIndex,]
+mf_test_data <- mf_data[-trainingIndex, ]
+mf_train_data <- mf_train_data[, setdiff(names(mf_train_data), "name")]
+mf_test_data <- mf_test_data[, setdiff(names(mf_test_data), "name")]
 ```
