@@ -5,9 +5,9 @@ editor: visual
 ---
 
 ```{r}
+library(ggplot2)
 library(caret)
 library(lightgbm)
-library(ggplot2)
 ```
 
 ```{r}
@@ -36,8 +36,11 @@ parameters <- list(
   metric = "auc",
   scale_pos_weight = sum(train_data$transfer == 0) / sum(train_data$transfer == 1),
   boosting_type = "gbdt",
-  learning_rate = 0.05,
-  num_leaves = 31
+  learning_rate = 0.075,
+  num_leaves = 65,
+  bagging_fraction = 0.8,
+  feature_fraction = 0.8,
+  max_depth = -1
 )
 ```
 
@@ -45,11 +48,11 @@ parameters <- list(
 gbm_model <- lgb.train(
   params = parameters,
   data = lgbtrain,
-  nrounds = 100,
+  nrounds = 250,
   valids = list(test = lgbtest),
   early_stopping_rounds = 10
 )
-# try class_weight = balanced?
+
 ```
 
 ```{r}
@@ -86,12 +89,11 @@ kappa <- conf_matrix$overall["Kappa"]
 
 # Create a data frame for the metrics
 metrics_df <- data.frame(
-  Metric = c("Accuracy", "Precision", "Recall", "F1-Score", "Kappa"),
   Value = c(accuracy, precision, recall, f1_score, kappa)
 )
 
 # Use kable to create a formatted table
-kable(metrics_df, col.names = c("Metric", "Value"), caption = "Model Evaluation Metrics")
+kable(metrics_df, col.names = c("Metric", "Value"), caption = "General Model Evaluation Metrics")
 ```
 
 Visualization
@@ -110,7 +112,8 @@ roc_data <- data.frame(TPR = roc_obj$sensitivities,
 roc_g <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "ROC Curve", x = "False Positive Rate", y = "True Positive Rate") +
+  labs(title = "ROC Curve for General LightGbm Model",
+       x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal()
 
 roc_g
@@ -156,7 +159,7 @@ conf_matrix_g <- ggplot(data = conf_df, aes(x = Reference, y = Prediction)) +
   scale_fill_gradient(low = "blue", high = "red") +
   geom_text(aes(label = Freq)) +
   theme_minimal() +
-  labs(title = "LightGbm Confusion Matrix", fill = "Frequency",
+  labs(title = "Generalized Model Confusion Matrix", fill = "Frequency",
        x = "Actual Status", y = "Predicted Status")
 
 conf_matrix_g
@@ -171,7 +174,7 @@ variable_importance_g <- ggplot(importance_df, aes(x = reorder(Feature, Gain),
   geom_bar(stat = "identity", fill = "skyblue") +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Feature Importance", x = "Feature",
+  labs(title = "Feature Importance for General LightGbm Model", x = "Feature",
        y = "Gain (Improvement in Log Loss When Splitting)")
 
 variable_importance_g
@@ -180,11 +183,9 @@ variable_importance_g
 Save Plots
 
 ```{r}
-ggsave("lightgbm_roc.png", plot = roc_g, width = 8, height = 6, bg = "white")
-ggsave("lightgbm_pr_curve.png", plot = pr_curve_g, width = 8, height = 6,
+ggsave("lightgbm_roc2.png", plot = roc_g, width = 8, height = 6, bg = "white")
+ggsave("lightgbm_conf_matrix2.png", plot = conf_matrix_g, width = 8, height = 6,
        bg = "white")
-ggsave("lightgbm_conf_matrix.png", plot = conf_matrix_g, width = 8, height = 6,
-       bg = "white")
-ggsave("lightgbm_var_import.png", plot = variable_importance_g, width = 8, 
+ggsave("lightgbm_var_import2.png", plot = variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```
