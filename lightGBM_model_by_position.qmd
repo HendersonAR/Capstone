@@ -484,3 +484,13 @@ ggsave("df_conf_matrix.png", plot = df_conf_matrix_g, width = 8, height = 6,
 ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```
+
+Notes for remaining analysis:
+
+Remove color from confusion matrix graph
+
+Fix labels on variable importance graph
+
+Manually make test prediction set that contains 50/50 transfer and non-transfer?
+
+Try oversampling, then undersampling, then SMOTE, compare results and if there are changes try to explain them (and if all are bad, look for explanations for that)
