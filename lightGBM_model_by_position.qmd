@@ -8,7 +8,6 @@ editor: visual
 library(ggplot2)
 library(caret)
 library(lightgbm)
-library(ggplot2)
 ```
 
 ```{r}
@@ -25,10 +24,12 @@ df_data <- cleaned_data[cleaned_data$DF == 1,]
 # forward model
 set.seed(278)
 fw_trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
-fw_train_data <- fw_data[trainingIndex,]
-fw_test_data <- fw_data[-trainingIndex, ]
+fw_train_data <- fw_data[fw_trainingIndex,]
+fw_test_data <- fw_data[-fw_trainingIndex, ]
 fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
 fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
+class_penalty <- sum(fw_train_data$transfer == 0) / 
+  sum(fw_train_data$transfer == 1)
 ```
 
 ```{r}
@@ -38,23 +39,25 @@ fw_lgbtest <- lgb.Dataset(data = as.matrix(fw_test_data[, setdiff(names(fw_test_
 ```
 
 ```{r}
-parameters <- list(
+fw_parameters <- list(
   objective = "binary",
   metric = "auc",
   scale_pos_weight = sum(fw_train_data$transfer == 0) / 
-    sum(fw_train_data$transfer == 1),
+    sum(fw_train_data$transfer== 1),
   boosting_type = "gbdt",
-  learning_rate = 0.05,
-  num_leaves = 31
-  #class_weight = "balanced"
+  learning_rate = 0.075,
+  num_leaves = 65,
+  bagging_fraction = 0.8,
+  feature_fraction = 0.8,
+  max_depth = -1
 )
 ```
 
 ```{r}
 fw_gbm_model <- lgb.train(
-  params = parameters,
+  params = fw_parameters,
   data = fw_lgbtrain,
-  nrounds = 100,
+  nrounds = 250,
   valids = list(test = fw_lgbtest),
   early_stopping_rounds = 10
 )
@@ -93,7 +96,7 @@ fw_metrics_df <- data.frame(
 )
 
 # Use kable to create a formatted table
-kable(fw_metrics_df, caption = "Model Evaluation Metrics")
+kable(fw_metrics_df, caption = "Forward Evaluation Metrics")
 ```
 
 ```{r}
@@ -105,14 +108,14 @@ fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
   FPR = 1 - fw_roc_obj$specificities,
   Thresholds = fw_roc_obj$thresholds
 )
-roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
+fw_roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
   labs(title = "ROC Curve - Forwards",
        x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal()
 
-roc_g
+fw_roc_g
 ```
 
 ```{r}
@@ -128,9 +131,9 @@ fw_recall <- sapply(thresholds, function(thresh) {
 })
 
 # Plot Precision-Recall Curve
-pr_curve_g <- plot(recall, precision, type = "l", col = "red", main = "Precision-Recall Curve",
+fw_pr_curve_g <- plot(fw_recall, fw_precision, type = "l", col = "red", main = "Precision-Recall Curve - Forwards",
      xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
-pr_curve_g
+fw_pr_curve_g
 ```
 
 ```{r}
@@ -165,19 +168,319 @@ fw_variable_importance_g <- ggplot(fw_importance_df,
   geom_bar(stat = "identity", fill = "skyblue") +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Feature Importance", x = "Feature",
+  scale_y_continuous(limits = c(0, 0.125)) +
+  labs(title = "Feature Importance - Forwards", x = "Feature",
        y = "Gain (Improvement in Log Loss When Splitting)")
 
 fw_variable_importance_g
+```
+
+```{r}
+ggsave("fw_roc.png", plot = fw_roc_g, width = 8, height = 6, bg = "white")
+ggsave("fw_conf_matrix.png", plot = fw_conf_matrix_g, width = 8, height = 6,
+       bg = "white")
+ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8, 
+       height = 6, bg = "white")
 ```
 
 **Midfield Model**
 
 ```{r}
 set.seed(278)
-trainingIndex <- createDataPartition(mf_data$transfer, p = 0.7, list = FALSE)
-mf_train_data <- mf_data[trainingIndex,]
-mf_test_data <- mf_data[-trainingIndex, ]
+mf_trainingIndex <- createDataPartition(mf_data$transfer, p = 0.7, list = FALSE)
+mf_train_data <- mf_data[mf_trainingIndex,]
+mf_test_data <- mf_data[-mf_trainingIndex, ]
 mf_train_data <- mf_train_data[, setdiff(names(mf_train_data), "name")]
 mf_test_data <- mf_test_data[, setdiff(names(mf_test_data), "name")]
+mf_class_penalty <- sum(mf_train_data$transfer == 0) /
+  sum(mf_train_data$transfer == 1)
+```
+
+```{r}
+mf_lgbtrain <- lgb.Dataset(data = as.matrix(mf_train_data[, setdiff(names(mf_train_data), "transfer")]), label = mf_train_data$transfer, 
+                           free_raw_data = FALSE)
+mf_lgbtest <- lgb.Dataset(data = as.matrix(mf_test_data[, setdiff(names(mf_test_data), "transfer")]), label = mf_test_data$transfer)
+```
+
+```{r}
+mf_parameters <- list(
+  objective = "binary",
+  metric = "auc",
+  scale_pos_weight = mf_class_penalty,
+  boosting_type = "gbdt",
+  learning_rate = 0.075,
+  num_leaves = 65,
+  bagging_fraction = 0.8,
+  feature_fraction = 0.8,
+  max_depth = -1
+)
+```
+
+```{r}
+mf_gbm_model <- lgb.train(
+  params = mf_parameters,
+  data = mf_lgbtrain,
+  nrounds = 250,
+  valids = list(test = mf_lgbtest),
+  early_stopping_rounds = 10
+)
+```
+
+```{r}
+mf_predictions <- predict(mf_gbm_model,
+                       as.matrix(mf_test_data[,setdiff(names(mf_test_data),
+                                                    "transfer")]), label =
+                         mf_test_data$transfer)
+summary(mf_predictions)
+mf_binary_predictions <- ifelse(mf_predictions > 0.5, 1, 0)
+
+accuracy <- mean(mf_binary_predictions == mf_test_data$transfer)
+cat("Accuracy:", accuracy, "\n")
+```
+
+```{r}
+mf_conf_matrix <- confusionMatrix(factor(mf_binary_predictions),
+                               factor(mf_test_data$transfer))
+
+mf_accuracy <- mf_conf_matrix$overall["Accuracy"]
+mf_precision <- mf_conf_matrix$byClass["Precision"]
+mf_recall <- mf_conf_matrix$byClass["Recall"]
+mf_f1_score <- mf_conf_matrix$byClass["F1"]
+mf_kappa <- mf_conf_matrix$overall["Kappa"]
+
+mf_metrics_df <- data.frame(
+  Value = c(mf_accuracy, mf_precision, mf_recall, mf_f1_score, mf_kappa)
+)
+
+kable(mf_metrics_df, caption = "Midfielder Evaluation Metrics")
+```
+
+```{r}
+mf_roc_obj <- roc(mf_test_data$transfer, mf_predictions)
+
+mf_roc_data <- data.frame(TPR = mf_roc_obj$sensitivities,
+  FPR = 1 - mf_roc_obj$specificities,
+  Thresholds = mf_roc_obj$thresholds
+)
+mf_roc_g <- ggplot(mf_roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "blue") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "ROC Curve - Midfielders",
+       x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal()
+
+mf_roc_g
+```
+
+```{r}
+thresholds <- seq(0, 1, by = 0.01)
+mf_precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(mf_predictions > thresh, 1, 0)
+  sum(predicted_labels & mf_test_data$transfer) / sum(predicted_labels)
+})
+mf_recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(mf_predictions > thresh, 1, 0)
+  sum(predicted_labels & mf_test_data$transfer) / sum(mf_test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+mf_pr_curve_g <- plot(mf_recall, mf_precision, type = "l", col = "red", main = "Precision-Recall Curve - Midfielders",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+mf_pr_curve_g
+```
+
+```{r}
+mf_conf_matrix <- confusionMatrix(factor(mf_binary_predictions),
+                               factor(mf_test_data$transfer))
+
+mf_conf_df <- as.data.frame(mf_conf_matrix$table)
+mf_conf_df$Prediction <- factor(mf_conf_df$Prediction, levels = c(0, 1),
+                             labels = c("no transfer", "transferred"))
+mf_conf_df$Reference <- factor(mf_conf_df$Reference, levels = c(0,1),
+                            labels = c("no transfer", "tranferred"))
+mf_conf_matrix_g <- ggplot(data = mf_conf_df, aes(x = Reference, y = Prediction)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  geom_text(aes(label = Freq)) +
+  theme_minimal() +
+  labs(title = "Confusion Matrix - Midfielders", fill = "Frequency",
+       x = "Actual Status", y = "Predicted Status")
+
+mf_conf_matrix_g
+```
+
+```{r}
+mf_importance <- lgb.importance(mf_gbm_model)
+mf_importance_df <- as.data.frame(mf_importance)
+
+mf_variable_importance_g <- ggplot(mf_importance_df,
+                                   aes(x = reorder(Feature, Gain),
+                                                   y = Gain)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 0.125)) +
+  theme_minimal() +
+  labs(title = "Feature Importance - Midfielders", x = "Feature",
+       y = "Gain (Improvement in Log Loss When Splitting)")
+
+mf_variable_importance_g
+```
+
+```{r}
+ggsave("mf_roc.png", plot = mf_roc_g, width = 8, height = 6, bg = "white")
+ggsave("mf_conf_matrix.png", plot = mf_conf_matrix_g, width = 8, height = 6,
+       bg = "white")
+ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8, 
+       height = 6, bg = "white")
+```
+
+**Defenders**
+
+```{r}
+set.seed(278)
+df_trainingIndex <- createDataPartition(df_data$transfer, p = 0.7, list = FALSE)
+df_train_data <- df_data[df_trainingIndex,]
+df_test_data <- df_data[-df_trainingIndex, ]
+df_train_data <- df_train_data[, setdiff(names(df_train_data), "name")]
+df_test_data <- df_test_data[, setdiff(names(df_test_data), "name")]
+df_class_penalty <- sum(df_train_data$transfer == 0) /
+  sum(df_train_data$transfer == 1)
+```
+
+```{r}
+df_lgbtrain <- lgb.Dataset(data = as.matrix(df_train_data[, setdiff(names(df_train_data), "transfer")]), label = df_train_data$transfer, 
+                           free_raw_data = FALSE)
+df_lgbtest <- lgb.Dataset(data = as.matrix(df_test_data[, setdiff(names(df_test_data), "transfer")]), label = df_test_data$transfer)
+```
+
+```{r}
+df_parameters <- list(
+  objective = "binary",
+  metric = "auc",
+  scale_pos_weight = df_class_penalty,
+  boosting_type = "gbdt",
+  learning_rate = 0.075,
+  num_leaves = 65,
+  bagging_fraction = 0.8,
+  feature_fraction = 0.8,
+  max_depth = -1
+)
+```
+
+```{r}
+df_gbm_model <- lgb.train(
+  params = df_parameters,
+  data = df_lgbtrain,
+  nrounds = 250,
+  valids = list(test = df_lgbtest),
+  early_stopping_rounds = 10
+)
+```
+
+```{r}
+df_predictions <- predict(df_gbm_model,
+                       as.matrix(df_test_data[,setdiff(names(df_test_data),
+                                                    "transfer")]), label =
+                         df_test_data$transfer)
+summary(df_predictions)
+df_binary_predictions <- ifelse(df_predictions > 0.5, 1, 0)
+
+accuracy <- mean(df_binary_predictions == df_test_data$transfer)
+cat("Accuracy:", accuracy, "\n")
+```
+
+```{r}
+df_conf_matrix <- confusionMatrix(factor(df_binary_predictions),
+                               factor(df_test_data$transfer))
+
+df_accuracy <- df_conf_matrix$overall["Accuracy"]
+df_precision <- df_conf_matrix$byClass["Precision"]
+df_recall <- df_conf_matrix$byClass["Recall"]
+df_f1_score <- df_conf_matrix$byClass["F1"]
+df_kappa <- df_conf_matrix$overall["Kappa"]
+
+df_metrics_df <- data.frame(
+  Value = c(df_accuracy, df_precision, df_recall, df_f1_score, df_kappa)
+)
+
+kable(df_metrics_df, caption = "Defender Evaluation Metrics")
+```
+
+```{r}
+df_roc_obj <- roc(df_test_data$transfer, df_predictions)
+
+df_roc_data <- data.frame(TPR = df_roc_obj$sensitivities,
+  FPR = 1 - df_roc_obj$specificities,
+  Thresholds = df_roc_obj$thresholds
+)
+df_roc_g <- ggplot(df_roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "blue") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "ROC Curve - Defenders",
+       x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal()
+
+df_roc_g
+```
+
+```{r}
+thresholds <- seq(0, 1, by = 0.01)
+df_precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(df_predictions > thresh, 1, 0)
+  sum(predicted_labels & df_test_data$transfer) / sum(predicted_labels)
+})
+df_recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(df_predictions > thresh, 1, 0)
+  sum(predicted_labels & df_test_data$transfer) / sum(df_test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+df_pr_curve_g <- plot(df_recall, df_precision, type = "l", col = "red", main = "Precision-Recall Curve - Defenders",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+df_pr_curve_g
+```
+
+```{r}
+df_conf_matrix <- confusionMatrix(factor(df_binary_predictions),
+                               factor(df_test_data$transfer))
+
+df_conf_df <- as.data.frame(df_conf_matrix$table)
+df_conf_df$Prediction <- factor(df_conf_df$Prediction, levels = c(0, 1),
+                             labels = c("no transfer", "transferred"))
+df_conf_df$Reference <- factor(df_conf_df$Reference, levels = c(0,1),
+                            labels = c("no transfer", "tranferred"))
+df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Reference, y = Prediction)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  geom_text(aes(label = Freq)) +
+  theme_minimal() +
+  labs(title = "Confusion Matrix - Defenders", fill = "Frequency",
+       x = "Actual Status", y = "Predicted Status")
+
+df_conf_matrix_g
+```
+
+```{r}
+df_importance <- lgb.importance(df_gbm_model)
+df_importance_df <- as.data.frame(df_importance)
+
+df_variable_importance_g <- ggplot(df_importance_df,
+                                   aes(x = reorder(Feature, Gain),
+                                                   y = Gain)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  #scale_y_continuous(limits = c(0, 0.125)) +
+  theme_minimal() +
+  labs(title = "Feature Importance - Defenders", x = "Feature",
+       y = "Gain (Improvement in Log Loss When Splitting)")
+
+df_variable_importance_g
+```
+
+```{r}
+ggsave("df_roc.png", plot = df_roc_g, width = 8, height = 6, bg = "white")
+ggsave("df_conf_matrix.png", plot = df_conf_matrix_g, width = 8, height = 6,
+       bg = "white")
+ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8, 
+       height = 6, bg = "white")
 ```

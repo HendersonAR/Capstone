@@ -173,6 +173,7 @@ variable_importance_g <- ggplot(importance_df, aes(x = reorder(Feature, Gain),
                                                    y = Gain)) +
   geom_bar(stat = "identity", fill = "skyblue") +
   coord_flip() +
+  scale_y_continuous(limits = c(0, 0.125)) +
   theme_minimal() +
   labs(title = "Feature Importance for General LightGbm Model", x = "Feature",
        y = "Gain (Improvement in Log Loss When Splitting)")
