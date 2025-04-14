@@ -142,18 +142,23 @@ fw_conf_matrix <- confusionMatrix(factor(fw_binary_predictions),
 
 # Plot Confusion Matrix
 library(ggplot2)
+fw_conf_matrix <- confusionMatrix(factor(fw_binary_predictions),
+                               factor(fw_test_data$transfer))
+
 fw_conf_df <- as.data.frame(fw_conf_matrix$table)
 fw_conf_df$Prediction <- factor(fw_conf_df$Prediction, levels = c(0, 1),
                              labels = c("no transfer", "transferred"))
 fw_conf_df$Reference <- factor(fw_conf_df$Reference, levels = c(0,1),
-                            labels = c("no transfer", "tranferred"))
-fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Reference, y = Prediction)) +
-  geom_tile(aes(fill = Freq), color = "white") +
-  scale_fill_gradient(low = "blue", high = "red") +
-  geom_text(aes(label = Freq)) +
+                            labels = c("no transfer", "transferred"))
+fw_total_obs <- sum(fw_conf_matrix$table)
+fw_conf_df$Proportion <- fw_conf_df$Freq / mf_total_obs
+fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(Freq,
+                               " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Forwards", fill = "Frequency",
-       x = "Actual Status", y = "Predicted Status")
+       x = "Predicted Value", y = "True Value")
 
 fw_conf_matrix_g
 ```
@@ -297,14 +302,16 @@ mf_conf_df <- as.data.frame(mf_conf_matrix$table)
 mf_conf_df$Prediction <- factor(mf_conf_df$Prediction, levels = c(0, 1),
                              labels = c("no transfer", "transferred"))
 mf_conf_df$Reference <- factor(mf_conf_df$Reference, levels = c(0,1),
-                            labels = c("no transfer", "tranferred"))
-mf_conf_matrix_g <- ggplot(data = mf_conf_df, aes(x = Reference, y = Prediction)) +
-  geom_tile(aes(fill = Freq), color = "white") +
-  scale_fill_gradient(low = "blue", high = "red") +
-  geom_text(aes(label = Freq)) +
+                            labels = c("no transfer", "transferred"))
+mf_total_obs <- sum(mf_conf_matrix$table)
+mf_conf_df$Proportion <- mf_conf_df$Freq / mf_total_obs
+mf_conf_matrix_g <- ggplot(data = mf_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(Freq,
+                               " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Midfielders", fill = "Frequency",
-       x = "Actual Status", y = "Predicted Status")
+       x = "Predicted Value", y = "True Value")
 
 mf_conf_matrix_g
 ```
@@ -448,14 +455,16 @@ df_conf_df <- as.data.frame(df_conf_matrix$table)
 df_conf_df$Prediction <- factor(df_conf_df$Prediction, levels = c(0, 1),
                              labels = c("no transfer", "transferred"))
 df_conf_df$Reference <- factor(df_conf_df$Reference, levels = c(0,1),
-                            labels = c("no transfer", "tranferred"))
-df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Reference, y = Prediction)) +
-  geom_tile(aes(fill = Freq), color = "white") +
-  scale_fill_gradient(low = "blue", high = "red") +
-  geom_text(aes(label = Freq)) +
+                            labels = c("no transfer", "transferred"))
+df_total_obs <- sum(df_conf_matrix$table)
+df_conf_df$Proportion <- df_conf_df$Freq / mf_total_obs
+df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(Freq,
+                               " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Defenders", fill = "Frequency",
-       x = "Actual Status", y = "Predicted Status")
+       x = "Predicted Value", y = "True Value")
 
 df_conf_matrix_g
 ```
@@ -487,7 +496,7 @@ ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8,
 
 Notes for remaining analysis:
 
-Remove color from confusion matrix graph
+Remove color from confusion matrix graph and add ratios
 
 Fix labels on variable importance graph
 
