@@ -147,27 +147,32 @@ binary_predictions <- ifelse(predictions > 0.5, 1, 0)
 conf_matrix <- confusionMatrix(factor(binary_predictions),
                                factor(test_data$transfer))
 
-# Plot Confusion Matrix
-library(ggplot2)
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
 conf_df <- as.data.frame(conf_matrix$table)
 conf_df$Prediction <- factor(conf_df$Prediction, levels = c(0, 1),
                              labels = c("no transfer", "transferred"))
 conf_df$Reference <- factor(conf_df$Reference, levels = c(0,1),
-                            labels = c("no transfer", "tranferred"))
-conf_matrix_g <- ggplot(data = conf_df, aes(x = Reference, y = Prediction)) +
-  geom_tile(aes(fill = Freq), color = "white") +
-  scale_fill_gradient(low = "blue", high = "red") +
-  geom_text(aes(label = Freq)) +
+                            labels = c("no transfer", "transferred"))
+total_obs <- sum(conf_matrix$table)
+conf_df$Proportion <- conf_df$Freq / total_obs
+conf_matrix_g <- ggplot(data = conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(Freq,
+                               " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
-  labs(title = "Generalized Model Confusion Matrix", fill = "Frequency",
-       x = "Actual Status", y = "Predicted Status")
+  labs(title = "General Model Confusion Matrix", fill = "Frequency",
+       x = "Predicted Value", y = "True Value")
 
 conf_matrix_g
 ```
 
 ```{r}
+library(stringr)
 importance <- lgb.importance(gbm_model)
 importance_df <- as.data.frame(importance)
+importance_df$Feature <- str_replace_all(importance_df$Feature, "_", " ")
 
 variable_importance_g <- ggplot(importance_df, aes(x = reorder(Feature, Gain),
                                                    y = Gain)) +
@@ -185,8 +190,8 @@ Save Plots
 
 ```{r}
 ggsave("lightgbm_roc2.png", plot = roc_g, width = 8, height = 6, bg = "white")
-ggsave("lightgbm_conf_matrix2.png", plot = conf_matrix_g, width = 8, height = 6,
-       bg = "white")
+ggsave("lightgbm_conf_matrix2.png",
+       plot = conf_matrix_g, width = 8, height = 6, bg = "white")
 ggsave("lightgbm_var_import2.png", plot = variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```

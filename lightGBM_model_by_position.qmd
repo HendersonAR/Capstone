@@ -8,6 +8,7 @@ editor: visual
 library(ggplot2)
 library(caret)
 library(lightgbm)
+library(stringr)
 ```
 
 ```{r}
@@ -151,7 +152,7 @@ fw_conf_df$Prediction <- factor(fw_conf_df$Prediction, levels = c(0, 1),
 fw_conf_df$Reference <- factor(fw_conf_df$Reference, levels = c(0,1),
                             labels = c("no transfer", "transferred"))
 fw_total_obs <- sum(fw_conf_matrix$table)
-fw_conf_df$Proportion <- fw_conf_df$Freq / mf_total_obs
+fw_conf_df$Proportion <- fw_conf_df$Freq / fw_total_obs
 fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Prediction, y = Reference)) +
   geom_tile(fill = "white", color = "black") +
   geom_text(aes(label = paste0(Freq,
@@ -166,6 +167,7 @@ fw_conf_matrix_g
 ```{r}
 fw_importance <- lgb.importance(fw_gbm_model)
 fw_importance_df <- as.data.frame(fw_importance)
+fw_importance_df$Feature <- str_replace_all(fw_importance_df$Feature, "_", " ")
 
 fw_variable_importance_g <- ggplot(fw_importance_df,
                                    aes(x = reorder(Feature, Gain),
@@ -319,6 +321,7 @@ mf_conf_matrix_g
 ```{r}
 mf_importance <- lgb.importance(mf_gbm_model)
 mf_importance_df <- as.data.frame(mf_importance)
+mf_importance_df$Feature <- str_replace_all(mf_importance_df$Feature, "_", " ")
 
 mf_variable_importance_g <- ggplot(mf_importance_df,
                                    aes(x = reorder(Feature, Gain),
@@ -457,7 +460,7 @@ df_conf_df$Prediction <- factor(df_conf_df$Prediction, levels = c(0, 1),
 df_conf_df$Reference <- factor(df_conf_df$Reference, levels = c(0,1),
                             labels = c("no transfer", "transferred"))
 df_total_obs <- sum(df_conf_matrix$table)
-df_conf_df$Proportion <- df_conf_df$Freq / mf_total_obs
+df_conf_df$Proportion <- df_conf_df$Freq / df_total_obs
 df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Prediction, y = Reference)) +
   geom_tile(fill = "white", color = "black") +
   geom_text(aes(label = paste0(Freq,
@@ -472,6 +475,7 @@ df_conf_matrix_g
 ```{r}
 df_importance <- lgb.importance(df_gbm_model)
 df_importance_df <- as.data.frame(df_importance)
+df_importance_df$Feature <- str_replace_all(df_importance_df$Feature, "_", " ")
 
 df_variable_importance_g <- ggplot(df_importance_df,
                                    aes(x = reorder(Feature, Gain),
