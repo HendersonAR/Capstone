@@ -104,6 +104,7 @@ library(pROC)
 
 ```{r}
 roc_obj <- roc(test_data$transfer, predictions)
+general_auc <- auc(roc_obj)
 
 roc_data <- data.frame(TPR = roc_obj$sensitivities,
   FPR = 1 - roc_obj$specificities,
@@ -114,7 +115,9 @@ roc_g <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
   labs(title = "ROC Curve for General LightGbm Model",
        x = "False Positive Rate", y = "True Positive Rate") +
-  theme_minimal()
+  theme_minimal() +
+  annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(general_auc, 3)),
+           size = 5, color = "black")
 
 roc_g
 
@@ -163,7 +166,12 @@ conf_matrix_g <- ggplot(data = conf_df, aes(x = Prediction, y = Reference)) +
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "General Model Confusion Matrix", fill = "Frequency",
-       x = "Predicted Value", y = "True Value")
+       x = "Predicted Value", y = "True Value") +
+  theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
+                                    hjust = 0.5)),
+        axis.title.y = (element_text(size = 13, color = "black")),
+        axis.text.x = (element_text(size = 13, color = "black")),
+        axis.title.x = (element_text(size = 13, color = "black")))
 
 conf_matrix_g
 ```

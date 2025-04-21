@@ -104,6 +104,7 @@ kable(fw_metrics_df, caption = "Forward Evaluation Metrics")
 library(pROC)
 
 fw_roc_obj <- roc(fw_test_data$transfer, fw_predictions)
+fw_auc <- auc(fw_roc_obj)
 
 fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
   FPR = 1 - fw_roc_obj$specificities,
@@ -114,7 +115,9 @@ fw_roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
   labs(title = "ROC Curve - Forwards",
        x = "False Positive Rate", y = "True Positive Rate") +
-  theme_minimal()
+  theme_minimal() +
+  annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(fw_auc, 3)),
+           size = 5, color = "black")
 
 fw_roc_g
 ```
@@ -159,7 +162,12 @@ fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Prediction, y = Reference)
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Forwards", fill = "Frequency",
-       x = "Predicted Value", y = "True Value")
+       x = "Predicted Value", y = "True Value") +
+  theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
+                                    hjust = 0.5)),
+        axis.title.y = (element_text(size = 13, color = "black")),
+        axis.text.x = (element_text(size = 13, color = "black")),
+        axis.title.x = (element_text(size = 13, color = "black")))
 
 fw_conf_matrix_g
 ```
@@ -264,6 +272,7 @@ kable(mf_metrics_df, caption = "Midfielder Evaluation Metrics")
 
 ```{r}
 mf_roc_obj <- roc(mf_test_data$transfer, mf_predictions)
+mf_auc <- auc(mf_roc_obj)
 
 mf_roc_data <- data.frame(TPR = mf_roc_obj$sensitivities,
   FPR = 1 - mf_roc_obj$specificities,
@@ -274,7 +283,9 @@ mf_roc_g <- ggplot(mf_roc_data, aes(x = FPR, y = TPR)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
   labs(title = "ROC Curve - Midfielders",
        x = "False Positive Rate", y = "True Positive Rate") +
-  theme_minimal()
+  theme_minimal() + 
+  annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(mf_auc, 3)),
+           size = 5, color = "black")
 
 mf_roc_g
 ```
@@ -313,7 +324,12 @@ mf_conf_matrix_g <- ggplot(data = mf_conf_df, aes(x = Prediction, y = Reference)
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Midfielders", fill = "Frequency",
-       x = "Predicted Value", y = "True Value")
+       x = "Predicted Value", y = "True Value") +
+  theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
+                                    hjust = 0.5)),
+        axis.title.y = (element_text(size = 13, color = "black")),
+        axis.text.x = (element_text(size = 13, color = "black")),
+        axis.title.x = (element_text(size = 13, color = "black")))
 
 mf_conf_matrix_g
 ```
@@ -418,6 +434,7 @@ kable(df_metrics_df, caption = "Defender Evaluation Metrics")
 
 ```{r}
 df_roc_obj <- roc(df_test_data$transfer, df_predictions)
+df_auc <- auc(df_roc_obj)
 
 df_roc_data <- data.frame(TPR = df_roc_obj$sensitivities,
   FPR = 1 - df_roc_obj$specificities,
@@ -428,7 +445,9 @@ df_roc_g <- ggplot(df_roc_data, aes(x = FPR, y = TPR)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
   labs(title = "ROC Curve - Defenders",
        x = "False Positive Rate", y = "True Positive Rate") +
-  theme_minimal()
+  theme_minimal() +
+  annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(df_auc, 3)),
+           size = 5, color = "black")
 
 df_roc_g
 ```
@@ -467,7 +486,12 @@ df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Prediction, y = Reference)
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
   labs(title = "Confusion Matrix - Defenders", fill = "Frequency",
-       x = "Predicted Value", y = "True Value")
+       x = "Predicted Value", y = "True Value") +
+  theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
+                                    hjust = 0.5)),
+        axis.title.y = (element_text(size = 13, color = "black")),
+        axis.text.x = (element_text(size = 13, color = "black")),
+        axis.title.x = (element_text(size = 13, color = "black")))
 
 df_conf_matrix_g
 ```
@@ -500,10 +524,10 @@ ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8,
 
 Notes for remaining analysis:
 
-Remove color from confusion matrix graph and add ratios
-
-Fix labels on variable importance graph
-
-Manually make test prediction set that contains 50/50 transfer and non-transfer?
+Manually make test prediction set that contains 50/50 transfer and non-transfer? (Probably no)
 
 Try oversampling, then undersampling, then SMOTE, compare results and if there are changes try to explain them (and if all are bad, look for explanations for that)
+
+-   Remove Kappa from table
+
+-   add AUC to table
