@@ -22,59 +22,6 @@ library(gridExtra)
 library(stringr)
 ```
 
-```{r}
-data <- read.csv("transfer_dataset.csv", stringsAsFactors = T)
-```
-
-```{r}
-str(data)
-summary(data)
-
-data$transfer <- as.factor(data$transfer)
-data$MF <- as.factor(data$MF)
-data$DF <- as.factor(data$DF)
-data$FW <- as.factor(data$FW)
-
-data <- na.omit(data)
-```
-
-```{r}
-set.seed(82)
-mf_down <- downSample(x = data[, setdiff(names(data), "transfer")],
-                      y = data$transfer,
-                      yname = "transfer")
-
-trainIndex <- createDataPartition(mf_down$transfer, p = 0.7, list = FALSE)
-trainData <- mf_down[trainIndex, ]
-testData <- mf_down[-trainIndex, ]
-
-```
-
-```{r}
-rf_model <- randomForest(transfer ~ . - season - player, 
-                         data = trainData, 
-                         ntree = 100,                            
-                         mtry = floor(sqrt(ncol(trainData) - 1)),
-                         importance = TRUE)
-```
-
-```{r}
-print(rf_model)
-```
-```{r}
-predictions <- predict(rf_model, testData)
-```
-
-
-```{r}
-confMat <- confusionMatrix(predictions, testData$transfer)
-print(confMat)
-```
-```{r}
-varImpPlot(rf_model)
-
-```
-
 Random Forest Models / Position
 
 ```{r}
@@ -344,5 +291,239 @@ ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, f
   ) +
   scale_fill_identity() +
   theme_minimal()
+```
+
+### Validation Testing
+
+```{r}
+set.seed(42)  # for reproducibility
+
+positions <- c("MF", "FW", "DF")
+
+models       <- list()
+conf_matrices<- list()
+validations  <- list()
+
+for (pos in positions) {
+  
+  # 1. Subset and clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !(names(pos_data) %in% c("season","player","MD","FW","DF"))]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 10) {
+    cat("Not enough data for position", pos, "\n")
+    next
+  }
+  
+  # 2. Create a stratified validation set (e.g. 10% of pos_data)
+  val_idx        <- createDataPartition(pos_data$transfer, p = 0.10, list = FALSE)
+  validation    <- pos_data[val_idx, ]
+  remaining     <- pos_data[-val_idx, ]
+  validations[[pos]] <- validation
+  
+  # 3. Balance the *remaining* data
+  ds <- upSample(
+    x     = remaining[, setdiff(names(remaining), "transfer")],
+    y     = remaining$transfer,
+    yname = "transfer"
+  )
+  
+  # 4. Split the balanced dataset into training (70%) and testing (30%)
+  train_idx <- createDataPartition(ds$transfer, p = 0.70, list = FALSE)
+  trainData <- ds[train_idx, ]
+  testData  <- ds[-train_idx, ]
+  
+  # 5. Train RF on the training set
+  rf_model <- randomForest(
+    transfer ~ .,
+    data = trainData,
+    ntree = 500,
+    mtry  = floor(sqrt(ncol(trainData) - 1)),
+    importance = TRUE
+  )
+  models[[pos]] <- rf_model
+  
+  # 6. Evaluate on test set
+  preds <- predict(rf_model, testData)
+  conf  <- confusionMatrix(preds, testData$transfer)
+  conf_matrices[[pos]] <- conf
+  
+  # 7. (Optional) Evaluate on your untouched validation set
+  val_preds <- predict(rf_model, validation)
+  val_conf  <- confusionMatrix(val_preds, validation$transfer)
+  
+  cat("=== Position:", pos, "===\n")
+  print(conf)
+  cat("Validation performance:\n")
+  print(val_conf)
+  cat("\n------------------------------\n")
+}
+
+```
+
+```{r}
+positions       <- c("MF", "FW", "DF")
+models_up       <- list()
+models_down     <- list()
+conf_up         <- list()
+conf_down       <- list()
+validations     <- list()
+
+for (pos in positions) {
+  
+  # 1. Subset and clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !(names(pos_data) %in% c("season","player","MD","FW","DF"))]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 10) {
+    cat("Not enough data for position", pos, "\n")
+    next
+  }
+  
+  # 2. Hold out a 10% validation set (stratified)
+  val_idx       <- createDataPartition(pos_data$transfer, p = 0.20, list = FALSE)
+  validation    <- pos_data[val_idx, ]
+  remaining     <- pos_data[-val_idx, ]
+  validations[[pos]] <- validation
+  
+  # 3A. Up-sample the minority class in the remaining data
+  ds_up <- upSample(
+    x     = remaining[, setdiff(names(remaining), "transfer")],
+    y     = remaining$transfer,
+    yname = "transfer"
+  )
+  
+  # 3B. Down-sample the majority class in the remaining data
+  ds_down <- downSample(
+    x     = remaining[, setdiff(names(remaining), "transfer")],
+    y     = remaining$transfer,
+    yname = "transfer"
+  )
+  
+  # 4. Function to train & evaluate
+  run_rf <- function(ds) {
+    idx   <- createDataPartition(ds$transfer, p = 0.70, list = FALSE)
+    train <- ds[idx, ]
+    test  <- ds[-idx, ]
+    
+    rf <- randomForest(
+      transfer ~ .,
+      data       = train,
+      ntree      = 500,
+      mtry       = floor(sqrt(ncol(train) - 1)),
+      importance = TRUE
+    )
+    preds     <- predict(rf, test)
+    cm        <- confusionMatrix(preds, test$transfer)
+    list(model = rf, cm = cm)
+  }
+  
+  # 5A. Train & eval on up-sampled
+  res_up          <- run_rf(ds_up)
+  models_up[[pos]]   <- res_up$model
+  conf_up[[pos]]   <- res_up$cm
+  
+  # 5B. Train & eval on down-sampled
+  res_down        <- run_rf(ds_down)
+  models_down[[pos]] <- res_down$model
+  conf_down[[pos]] <- res_down$cm
+  
+  # 6. Print results
+  cat("\n---", pos, " (UPSAMPLED) ---\n")
+  print(conf_up[[pos]])
+  cat("\n---", pos, " (DOWNSAMPLED) ---\n")
+  print(conf_down[[pos]])
+  cat("\n===========================\n")
+}
+```
+
+```{r}
+for (pos in positions) {
+  cat("\n=== Position:", pos, "===\n")
+  
+  val_data <- validations[[pos]]
+  if (is.null(val_data) || nrow(val_data) == 0) {
+    cat("  No validation data for", pos, "\n"); next
+  }
+  
+  # Upsampled model
+  if (!is.null(models_up[[pos]])) {
+    preds_up    <- predict(models_up[[pos]], val_data)
+    cm_val_up   <- confusionMatrix(preds_up, val_data$transfer)
+    cat("\n-- Validation (upsampled training) --\n")
+    print(cm_val_up)
+  }
+  
+  # Downsampled model
+  if (!is.null(models_down[[pos]])) {
+    preds_down  <- predict(models_down[[pos]], val_data)
+    cm_val_down <- confusionMatrix(preds_down, val_data$transfer)
+    cat("\n-- Validation (downsampled training) --\n")
+    print(cm_val_down)
+  }
+  
+  cat("\n------------------------------\n")
+}
+```
+```{r}
+perf_up <- do.call(rbind, lapply(names(conf_up), function(pos) {
+  cm <- conf_up[[pos]]
+  data.frame(
+    Position    = pos,
+    Sampling    = "Up-sampled",
+    Accuracy    = round(as.numeric(cm$overall["Accuracy"]),    3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3),
+    stringsAsFactors = FALSE
+  )
+}))
+
+perf_down <- do.call(rbind, lapply(names(conf_down), function(pos) {
+  cm <- conf_down[[pos]]
+  data.frame(
+    Position    = pos,
+    Sampling    = "Down-sampled",
+    Accuracy    = round(as.numeric(cm$overall["Accuracy"]),    3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3),
+    stringsAsFactors = FALSE
+  )
+}))
+
+performance_val <- rbind(perf_up, perf_down)
+
+# 2. Render it as a kable
+kable(performance_val,
+      caption   = "Validation Set Performance: Up- vs. Down-sampled RF Models",
+      col.names = c("Position", "Sampling", "Accuracy", "Sensitivity", "Specificity")) %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+# 3. Turn it into a grob for plotting
+title_perf <- textGrob("Validation Set Performance: Up- vs. Down-sampled RF Models",
+                       gp = gpar(fontsize = 14, fontface = "bold"))
+perf_grob  <- tableGrob(performance_val)
+
+grid.newpage()
+grid.arrange(title_perf, perf_grob, 
+             nrow = 2, heights = c(0.15, 0.85))
+
+# 4. Plot each confusion matrix from validation for both sampling strategies
+for (pos in intersect(names(conf_up), names(conf_down))) {
+  # Up-sampled
+  cm_up_grob <- tableGrob(as.table(conf_up[[pos]]$table))
+  title_up   <- textGrob(paste(pos, "- Up-sampled Validation"), 
+                         gp = gpar(fontsize = 13, fontface = "bold"))
+  grid.newpage()
+  grid.arrange(title_up, cm_up_grob, nrow = 2, heights = c(0.15, 0.85))
+  
+  # Down-sampled
+  cm_down_grob <- tableGrob(as.table(conf_down[[pos]]$table))
+  title_down   <- textGrob(paste(pos, "- Down-sampled Validation"), 
+                           gp = gpar(fontsize = 13, fontface = "bold"))
+  grid.newpage()
+  grid.arrange(title_down, cm_down_grob, nrow = 2, heights = c(0.15, 0.85))
+}
 ```
 
