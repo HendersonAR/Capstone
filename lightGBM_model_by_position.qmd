@@ -24,13 +24,21 @@ df_data <- cleaned_data[cleaned_data$DF == 1,]
 ```{r}
 # forward model
 set.seed(278)
-fw_trainingIndex <- createDataPartition(fw_data$transfer, p = 0.7, list = FALSE)
-fw_train_data <- fw_data[fw_trainingIndex,]
-fw_test_data <- fw_data[-fw_trainingIndex, ]
+fw_transfers <- fw_data[fw_data$transfer == 0,]
+fw_nontransfers <- fw_data[fw_data$transfer == 1,]
+fw_transfer_sample <- transfers[sample(nrow(fw_transfers), nrow(fw_nontransfers)),]
+fw_balanced_data <- rbind(fw_transfer_sample, fw_nontransfers)
+#class_penalty <- sum(fw_train_data$transfer == 0) / 
+  #sum(fw_train_data$transfer == 1)
+```
+
+```{r}
+fw_trainingIndex <- createDataPartition(fw_balanced_data$transfer,
+                                        p = 0.7, list = FALSE)
+fw_train_data <- fw_balanced_data[fw_trainingIndex,]
+fw_test_data <- fw_balanced_data[-fw_trainingIndex, ]
 fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
 fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
-class_penalty <- sum(fw_train_data$transfer == 0) / 
-  sum(fw_train_data$transfer == 1)
 ```
 
 ```{r}
@@ -43,8 +51,8 @@ fw_lgbtest <- lgb.Dataset(data = as.matrix(fw_test_data[, setdiff(names(fw_test_
 fw_parameters <- list(
   objective = "binary",
   metric = "auc",
-  scale_pos_weight = sum(fw_train_data$transfer == 0) / 
-    sum(fw_train_data$transfer== 1),
+  #scale_pos_weight = sum(fw_train_data$transfer == 0) / 
+    #sum(fw_train_data$transfer== 1),
   boosting_type = "gbdt",
   learning_rate = 0.075,
   num_leaves = 65,
@@ -77,6 +85,13 @@ cat("Accuracy:", accuracy, "\n")
 ```
 
 ```{r}
+library(pROC)
+
+fw_roc_obj <- roc(fw_test_data$transfer, fw_predictions)
+fw_auc <- auc(fw_roc_obj)
+```
+
+```{r}
 if (!require(knitr)) install.packages("knitr")
 library(knitr)
 
@@ -87,24 +102,19 @@ fw_conf_matrix <- confusionMatrix(factor(fw_binary_predictions),
 # Extract relevant metrics
 fw_accuracy <- fw_conf_matrix$overall["Accuracy"]
 fw_precision <- fw_conf_matrix$byClass["Precision"]
-fw_recall <- fw_conf_matrix$byClass["Recall"]
 fw_f1_score <- fw_conf_matrix$byClass["F1"]
-fw_kappa <- fw_conf_matrix$overall["Kappa"]
 
 # Create a data frame for the metrics
 fw_metrics_df <- data.frame(
-  Value = c(fw_accuracy, fw_precision, fw_recall, fw_f1_score, fw_kappa)
+  Metric = c("Accuracy", "Precision", "F1", "AUC"),
+  Value = unname(c(fw_accuracy, fw_precision, fw_f1_score, fw_auc))
 )
 
 # Use kable to create a formatted table
-kable(fw_metrics_df, caption = "Forward Evaluation Metrics")
+kable(fw_metrics_df, caption = "Forward Evaluation Metrics (Undersampling)")
 ```
 
 ```{r}
-library(pROC)
-
-fw_roc_obj <- roc(fw_test_data$transfer, fw_predictions)
-fw_auc <- auc(fw_roc_obj)
 
 fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
   FPR = 1 - fw_roc_obj$specificities,
@@ -113,7 +123,7 @@ fw_roc_data <- data.frame(TPR = fw_roc_obj$sensitivities,
 fw_roc_g <- ggplot(fw_roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "ROC Curve - Forwards",
+  labs(title = "ROC Curve - Forwards (Undersampling)",
        x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal() +
   annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(fw_auc, 3)),
@@ -161,7 +171,7 @@ fw_conf_matrix_g <- ggplot(data = fw_conf_df, aes(x = Prediction, y = Reference)
   geom_text(aes(label = paste0(Freq,
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
-  labs(title = "Confusion Matrix - Forwards", fill = "Frequency",
+  labs(title = "Confusion Matrix - Forwards (Undersampling)", fill = "Frequency",
        x = "Predicted Value", y = "True Value") +
   theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
                                     hjust = 0.5)),
@@ -191,9 +201,10 @@ fw_variable_importance_g
 ```
 
 ```{r}
-ggsave("fw_roc.png", plot = fw_roc_g, width = 8, height = 6, bg = "white")
-ggsave("fw_conf_matrix.png", plot = fw_conf_matrix_g, width = 8, height = 6,
-       bg = "white")
+ggsave("undersampled_fw_roc.png", plot = fw_roc_g, width = 8,
+       height = 6, bg = "white")
+ggsave("undersampled_fw_conf_matrix.png", plot = fw_conf_matrix_g,
+       width = 8, height = 6, bg = "white")
 ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```
@@ -202,26 +213,37 @@ ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8,
 
 ```{r}
 set.seed(278)
-mf_trainingIndex <- createDataPartition(mf_data$transfer, p = 0.7, list = FALSE)
-mf_train_data <- mf_data[mf_trainingIndex,]
-mf_test_data <- mf_data[-mf_trainingIndex, ]
+mf_transfers <- mf_data[mf_data$transfer == 0,]
+mf_nontransfers <- mf_data[mf_data$transfer == 1,]
+mf_transfer_sample <- transfers[sample(nrow(mf_transfers), nrow(mf_nontransfers)),]
+mf_balanced_data <- rbind(mf_transfer_sample, mf_nontransfers)
+#mf_class_penalty <- sum(mf_train_data$transfer == 0) /
+  #sum(mf_train_data$transfer == 1)
+```
+
+```{r}
+mf_trainingIndex <- createDataPartition(mf_balanced_data$transfer,
+                                        p = 0.7, list = FALSE)
+mf_train_data <- mf_balanced_data[mf_trainingIndex,]
+mf_test_data <- mf_balanced_data[-mf_trainingIndex, ]
 mf_train_data <- mf_train_data[, setdiff(names(mf_train_data), "name")]
 mf_test_data <- mf_test_data[, setdiff(names(mf_test_data), "name")]
-mf_class_penalty <- sum(mf_train_data$transfer == 0) /
-  sum(mf_train_data$transfer == 1)
+#mf_class_penalty <- sum(mf_train_data$transfer == 0) /
+  #sum(mf_train_data$transfer == 1)
 ```
 
 ```{r}
 mf_lgbtrain <- lgb.Dataset(data = as.matrix(mf_train_data[, setdiff(names(mf_train_data), "transfer")]), label = mf_train_data$transfer, 
                            free_raw_data = FALSE)
 mf_lgbtest <- lgb.Dataset(data = as.matrix(mf_test_data[, setdiff(names(mf_test_data), "transfer")]), label = mf_test_data$transfer)
+
 ```
 
 ```{r}
 mf_parameters <- list(
   objective = "binary",
   metric = "auc",
-  scale_pos_weight = mf_class_penalty,
+  #scale_pos_weight = mf_class_penalty,
   boosting_type = "gbdt",
   learning_rate = 0.075,
   num_leaves = 65,
@@ -254,20 +276,24 @@ cat("Accuracy:", accuracy, "\n")
 ```
 
 ```{r}
+mf_roc_obj <- roc(mf_test_data$transfer, mf_predictions)
+mf_auc <- auc(mf_roc_obj)
+```
+
+```{r}
 mf_conf_matrix <- confusionMatrix(factor(mf_binary_predictions),
                                factor(mf_test_data$transfer))
 
 mf_accuracy <- mf_conf_matrix$overall["Accuracy"]
 mf_precision <- mf_conf_matrix$byClass["Precision"]
-mf_recall <- mf_conf_matrix$byClass["Recall"]
 mf_f1_score <- mf_conf_matrix$byClass["F1"]
-mf_kappa <- mf_conf_matrix$overall["Kappa"]
 
 mf_metrics_df <- data.frame(
-  Value = c(mf_accuracy, mf_precision, mf_recall, mf_f1_score, mf_kappa)
+  Metric = c("Accuracy", "Precision", "F1", "AUC"),
+  Value = unname(c(mf_accuracy, mf_precision, mf_f1_score, mf_auc))
 )
 
-kable(mf_metrics_df, caption = "Midfielder Evaluation Metrics")
+kable(mf_metrics_df, caption = "Midfielder Evaluation Metrics (Undersampling)")
 ```
 
 ```{r}
@@ -281,7 +307,7 @@ mf_roc_data <- data.frame(TPR = mf_roc_obj$sensitivities,
 mf_roc_g <- ggplot(mf_roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "ROC Curve - Midfielders",
+  labs(title = "ROC Curve - Midfielders (Undersampling)",
        x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal() + 
   annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(mf_auc, 3)),
@@ -323,7 +349,8 @@ mf_conf_matrix_g <- ggplot(data = mf_conf_df, aes(x = Prediction, y = Reference)
   geom_text(aes(label = paste0(Freq,
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
-  labs(title = "Confusion Matrix - Midfielders", fill = "Frequency",
+  labs(title = "Confusion Matrix - Midfielders (Undersampling)",
+       fill = "Frequency",
        x = "Predicted Value", y = "True Value") +
   theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
                                     hjust = 0.5)),
@@ -353,9 +380,10 @@ mf_variable_importance_g
 ```
 
 ```{r}
-ggsave("mf_roc.png", plot = mf_roc_g, width = 8, height = 6, bg = "white")
-ggsave("mf_conf_matrix.png", plot = mf_conf_matrix_g, width = 8, height = 6,
-       bg = "white")
+ggsave("undersampling_mf_roc.png", plot = mf_roc_g, width = 8,
+       height = 6, bg = "white")
+ggsave("undersampling_mf_conf_matrix.png", plot = mf_conf_matrix_g,
+       width = 8, height = 6, bg = "white")
 ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```
@@ -364,13 +392,22 @@ ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8,
 
 ```{r}
 set.seed(278)
-df_trainingIndex <- createDataPartition(df_data$transfer, p = 0.7, list = FALSE)
-df_train_data <- df_data[df_trainingIndex,]
-df_test_data <- df_data[-df_trainingIndex, ]
+df_transfers <- df_data[df_data$transfer == 0,]
+df_nontransfers <- df_data[df_data$transfer == 1,]
+df_transfer_sample <- transfers[sample(nrow(df_transfers), nrow(df_nontransfers)),]
+df_balanced_data <- rbind(df_transfer_sample, df_nontransfers)
+```
+
+```{r}
+set.seed(278)
+df_trainingIndex <- createDataPartition(df_balanced_data$transfer,
+                                        p = 0.7, list = FALSE)
+df_train_data <- df_balanced_data[df_trainingIndex,]
+df_test_data <- df_balanced_data[-df_trainingIndex, ]
 df_train_data <- df_train_data[, setdiff(names(df_train_data), "name")]
 df_test_data <- df_test_data[, setdiff(names(df_test_data), "name")]
-df_class_penalty <- sum(df_train_data$transfer == 0) /
-  sum(df_train_data$transfer == 1)
+#df_class_penalty <- sum(df_train_data$transfer == 0) /
+  #sum(df_train_data$transfer == 1)
 ```
 
 ```{r}
@@ -383,7 +420,7 @@ df_lgbtest <- lgb.Dataset(data = as.matrix(df_test_data[, setdiff(names(df_test_
 df_parameters <- list(
   objective = "binary",
   metric = "auc",
-  scale_pos_weight = df_class_penalty,
+  #scale_pos_weight = df_class_penalty,
   boosting_type = "gbdt",
   learning_rate = 0.075,
   num_leaves = 65,
@@ -416,26 +453,28 @@ cat("Accuracy:", accuracy, "\n")
 ```
 
 ```{r}
+df_roc_obj <- roc(df_test_data$transfer, df_predictions)
+df_auc <- auc(df_roc_obj)
+```
+
+```{r}
 df_conf_matrix <- confusionMatrix(factor(df_binary_predictions),
                                factor(df_test_data$transfer))
 
 df_accuracy <- df_conf_matrix$overall["Accuracy"]
 df_precision <- df_conf_matrix$byClass["Precision"]
-df_recall <- df_conf_matrix$byClass["Recall"]
 df_f1_score <- df_conf_matrix$byClass["F1"]
-df_kappa <- df_conf_matrix$overall["Kappa"]
+
 
 df_metrics_df <- data.frame(
-  Value = c(df_accuracy, df_precision, df_recall, df_f1_score, df_kappa)
+  Metric = c("Accuracy", "Precision", "F1", "AUC"),
+  Value = unname(c(df_accuracy, df_precision, df_f1_score, df_auc))
 )
 
-kable(df_metrics_df, caption = "Defender Evaluation Metrics")
+kable(df_metrics_df, caption = "Defender Evaluation Metrics (Undersampling)")
 ```
 
 ```{r}
-df_roc_obj <- roc(df_test_data$transfer, df_predictions)
-df_auc <- auc(df_roc_obj)
-
 df_roc_data <- data.frame(TPR = df_roc_obj$sensitivities,
   FPR = 1 - df_roc_obj$specificities,
   Thresholds = df_roc_obj$thresholds
@@ -443,7 +482,7 @@ df_roc_data <- data.frame(TPR = df_roc_obj$sensitivities,
 df_roc_g <- ggplot(df_roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "blue") + 
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "ROC Curve - Defenders",
+  labs(title = "ROC Curve - Defenders (Undersampling)",
        x = "False Positive Rate", y = "True Positive Rate") +
   theme_minimal() +
   annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(df_auc, 3)),
@@ -485,7 +524,8 @@ df_conf_matrix_g <- ggplot(data = df_conf_df, aes(x = Prediction, y = Reference)
   geom_text(aes(label = paste0(Freq,
                                " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
   theme_minimal() +
-  labs(title = "Confusion Matrix - Defenders", fill = "Frequency",
+  labs(title = "Confusion Matrix - Defenders (Undersampling)",
+       fill = "Frequency",
        x = "Predicted Value", y = "True Value") +
   theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
                                     hjust = 0.5)),
@@ -515,19 +555,16 @@ df_variable_importance_g
 ```
 
 ```{r}
-ggsave("df_roc.png", plot = df_roc_g, width = 8, height = 6, bg = "white")
-ggsave("df_conf_matrix.png", plot = df_conf_matrix_g, width = 8, height = 6,
-       bg = "white")
+ggsave("undersampling_df_roc.png", plot = df_roc_g, width = 8,
+       height = 6, bg = "white")
+ggsave("undersampling_df_conf_matrix.png", plot = df_conf_matrix_g,
+       width = 8, height = 6, bg = "white")
 ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8, 
        height = 6, bg = "white")
 ```
 
 Notes for remaining analysis:
 
-Manually make test prediction set that contains 50/50 transfer and non-transfer? (Probably no)
+Ask about whether prediction set should be balanced or not (I think so)
 
-Try oversampling, then undersampling, then SMOTE, compare results and if there are changes try to explain them (and if all are bad, look for explanations for that)
-
--   Remove Kappa from table
-
--   add AUC to table
+Try oversampling, compare results to undersampling and if there are changes try to explain them (and if all are bad, look for explanations for that)
