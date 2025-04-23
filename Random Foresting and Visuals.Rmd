@@ -24,6 +24,8 @@ library(stringr)
 
 ```{r}
 data <- read.csv("transfer_dataset.csv", stringsAsFactors = T)
+data <- data[, !names(data) %in% c("player", "season")]
+
 ```
 
 ```{r}
@@ -417,7 +419,7 @@ print(df_conf_matrix_g)
 ```
 ```{r}
 plot_pos_cm <- function(pos, samp_type, df, splits_fn) {
-  # subset & factor
+  
   pos_data <- subset(df, df[[pos]] == 1)
   pos_data$transfer <- factor(pos_data$transfer)
   if (nrow(pos_data) < 50) return(NULL)
@@ -776,5 +778,184 @@ ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, f
   ) +
   scale_fill_identity() +
   theme_minimal()
+```
+
+```{r}
+set.seed(42)
+
+positions <- c("MF", "FW", "DF")
+validation_sets <- list()
+
+for (pos in positions) {
+  # 1) Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 50) {
+    warning("Not enough data for ", pos, "—skipping validation split")
+    next
+  }
+  
+  # 2) Create a 20% validation split
+  idx_val <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
+  validation_sets[[pos]] <- pos_data[idx_val, ]
+  
+  # (Optional) the remaining 80% you can grab with:
+  # train_sets[[pos]] <- pos_data[-idx_val, ]
+}
+```
+
+```{r}
+for (pos in positions) {
+  # 1) Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 50) {
+    message("Skipping ", pos, ": too few rows")
+    next
+  }
+  
+  # 2) Validation split (20%)
+  idx_val     <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
+  validation  <- pos_data[idx_val, ]
+  train_data  <- pos_data[-idx_val, ]
+  
+  # 3) One‐hot encode (to avoid categorical‐level limits)
+  dv          <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
+  train_dmy   <- predict(dv, newdata = train_data) %>% as.data.frame()
+  train_dmy$transfer <- train_data$transfer
+  valid_dmy   <- predict(dv, newdata = validation) %>% as.data.frame()
+  valid_dmy$transfer <- validation$transfer
+  
+  # 4) Fit RF on training 80%
+  rf_mod      <- randomForest(
+    transfer ~ ., 
+    data   = train_dmy, 
+    ntree  = 500, 
+    mtry   = floor(sqrt(ncol(train_dmy) - 1))
+  )
+  
+  # 5) Predict & build tidy cm df
+  preds       <- predict(rf_mod, valid_dmy)
+  cm_matrix   <- confusionMatrix(preds, valid_dmy$transfer)
+  df_cm       <- as.data.frame(cm_matrix$table)
+  total_obs   <- sum(df_cm$Freq)
+  
+  df_cm$Prediction <- factor(
+    df_cm$Prediction,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Reference  <- factor(
+    df_cm$Reference,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Proportion <- round(df_cm$Freq / total_obs, 3)
+  
+  # 6) Print in exact format
+  cat("\n---", pos, "Validation Confusion Matrix ---\n")
+  print(df_cm, row.names = FALSE)
+}
+
+```
+
+```{r}
+pos_titles <- c(
+  FW = "Forwards",
+  MF = "Midfielders",
+  DF = "Defenders"
+)
+
+set.seed(123)            # for reproducibility
+conf_plots <- list()
+
+for (pos in positions) {
+  # 1) Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  if (nrow(pos_data) < 50) {
+    message("Skipping ", pos, ": too few rows")
+    next
+  }
+
+  # 2) 60/20/20 split
+  idx_train   <- createDataPartition(pos_data$transfer, p = 0.60, list = FALSE)
+  train_data  <- pos_data[idx_train, ]
+  temp_data   <- pos_data[-idx_train, ]
+  idx_test    <- createDataPartition(temp_data$transfer, p = 0.50, list = FALSE)
+  test_data   <- temp_data[idx_test, ]
+  validation  <- temp_data[-idx_test, ]
+
+  # 3) One‐hot encode (fit on train only)
+  dv         <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
+  train_dmy  <- predict(dv, newdata = train_data)  %>% as.data.frame()
+  train_dmy$transfer <- train_data$transfer
+  test_dmy   <- predict(dv, newdata = test_data)   %>% as.data.frame()
+  test_dmy$transfer  <- test_data$transfer
+  valid_dmy  <- predict(dv, newdata = validation)  %>% as.data.frame()
+  valid_dmy$transfer <- validation$transfer
+
+  # 4) Fit RF on the 60%
+  rf_mod <- randomForest(
+    transfer ~ .,
+    data  = train_dmy,
+    ntree = 500,
+    mtry  = floor(sqrt(ncol(train_dmy) - 1))
+  )
+
+  # 5) Predict on TEST (20%) and build CM df
+  test_preds <- predict(rf_mod, newdata = test_dmy[, setdiff(names(test_dmy), "transfer")])
+  cm_test    <- confusionMatrix(test_preds, test_dmy$transfer)
+  df_test    <- as.data.frame(cm_test$table)
+  df_test$Proportion <- df_test$Freq / sum(df_test$Freq)
+  df_test$Dataset    <- "Test"
+
+  # —and on VALIDATION (20%)
+  valid_preds   <- predict(rf_mod, newdata = valid_dmy[, setdiff(names(valid_dmy), "transfer")])
+  cm_valid      <- confusionMatrix(valid_preds, valid_dmy$transfer)
+  df_valid      <- as.data.frame(cm_valid$table)
+  df_valid$Proportion <- df_valid$Freq / sum(df_valid$Freq)
+  df_valid$Dataset    <- "Validation"
+
+  # combine for plotting if you like, or plot separately
+  df_cm <- rbind(df_test, df_valid)
+  df_cm$Prediction <- factor(
+    df_cm$Prediction,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Reference <- factor(
+    df_cm$Reference,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+
+  # 6) Plot both in facets
+  title_str <- if (pos %in% names(pos_titles)) pos_titles[[pos]] else pos
+  p <- ggplot(df_cm, aes(x = Prediction, y = Reference)) +
+    geom_tile(fill = "white", color = "black") +
+    geom_text(aes(label = paste0(Freq,
+                                 " (", sprintf("%.2f", Proportion * 100), "%)")),
+              size = 5) +
+    facet_wrap(~ Dataset) +
+    theme_minimal() +
+    labs(title = paste("Confusion Matrix –", title_str),
+         x     = "Predicted Value",
+         y     = "True Value") +
+    theme(
+      axis.text.y  = element_text(size = 13, color = "black", angle = 90, hjust = 0.5),
+      axis.title.y = element_text(size = 13, color = "black"),
+      axis.text.x  = element_text(size = 13, color = "black"),
+      axis.title.x = element_text(size = 13, color = "black")
+    )
+
+  print(p)
+  conf_plots[[pos]] <- p
+}
 ```
 
