@@ -74,20 +74,20 @@ for (pos in positions) {
     cat("Not enough data for", pos, "\n"); next
   }
   
-  # 2) Three-way split
+  #  Three-way split
   splits <- three_way_split(pos_data, "transfer")
   train      <- splits$train
   validation <- splits$validation
-  # (You can also keep splits$test if you wish to hold out a final test set.)
+
   
-  # 3) Down-sample training only
+  # Down-sample training only
   down <- downSample(
     x     = train[, setdiff(names(train), "transfer")],
     y     = train$transfer,
     yname = "transfer"
   )
   
-  # 4) Train RF on down-sampled training set
+  # Train RF on down-sampled training set
   rf_mod <- randomForest(
     transfer ~ .,
     data   = down,
@@ -117,12 +117,12 @@ positions <- c("MF", "FW", "DF")
 
 for (pos in positions) {
   
-  # 1) Subset & clean
+  # Subset & clean
   pos_data <- subset(data, data[[pos]] == 1)
   pos_data <- pos_data[, !names(pos_data) %in% c("season", "player", "MF", "FW", "DF")]
   pos_data$transfer <- as.factor(pos_data$transfer)
   
-  # 2) Three‐way split: 60% train, 20% test, 20% validation
+  # Three‐way split: 60% train, 20% test, 20% validation
   idx_train <- createDataPartition(pos_data$transfer, p = 0.6, list = FALSE)
   trainData <- pos_data[idx_train, ]
   temp      <- pos_data[-idx_train, ]
@@ -131,7 +131,7 @@ for (pos in positions) {
   testData  <- temp[idx_test, ]
   validData <- temp[-idx_test, ]
   
-  # 3) Down‐sample and up‐sample the TRAINING set
+  # Down‐sample and up‐sample the TRAINING set
   train_down <- downSample(
     x     = trainData[, setdiff(names(trainData), "transfer")],
     y     = trainData$transfer,
@@ -143,7 +143,7 @@ for (pos in positions) {
     yname = "transfer"
   )
   
-  # 4) Fit RF on each sampled training set
+  # Fit RF on each sampled training set
   rf_down <- randomForest(
     transfer ~ .,
     data  = train_down,
@@ -157,7 +157,7 @@ for (pos in positions) {
     mtry  = floor(sqrt(ncol(train_up) - 1))
   )
   
-  # 6) Predict & evaluate on VALIDATION set
+  # Predict & evaluate on VALIDATION set
   cat("\n---", pos, "Players: Down‐Sampled Model (Validation) ---\n")
   pred_val_down <- predict(rf_down, validData)
   print(confusionMatrix(pred_val_down, validData$transfer))
@@ -186,11 +186,11 @@ for (pos in positions) {
   # ... your three‐way split, down/up‐sampling, and model fitting here ...
   # (trainData, validData, rf_down, rf_up, testData, etc.)
   
-  # 5) Predict & evaluate on TEST set
+  # Predict & evaluate on TEST set
   cm_test_down <- confusionMatrix(predict(rf_down, testData), testData$transfer)
   cm_test_up   <- confusionMatrix(predict(rf_up,   testData), testData$transfer)
   
-  # 6) Predict & evaluate on VALIDATION set
+  # Predict & evaluate on VALIDATION set
   cm_val_down <- confusionMatrix(predict(rf_down, validData), validData$transfer)
   cm_val_up   <- confusionMatrix(predict(rf_up,   validData), validData$transfer)
   
@@ -787,7 +787,7 @@ positions <- c("MF", "FW", "DF")
 validation_sets <- list()
 
 for (pos in positions) {
-  # 1) Subset & clean
+  # Subset & clean
   pos_data <- subset(data, data[[pos]] == 1)
   pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
   pos_data$transfer <- factor(pos_data$transfer)
@@ -797,7 +797,7 @@ for (pos in positions) {
     next
   }
   
-  # 2) Create a 20% validation split
+  # Create a 20% validation split
   idx_val <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
   validation_sets[[pos]] <- pos_data[idx_val, ]
   
@@ -818,19 +818,19 @@ for (pos in positions) {
     next
   }
   
-  # 2) Validation split (20%)
+#  Validation split (20%)
   idx_val     <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
   validation  <- pos_data[idx_val, ]
   train_data  <- pos_data[-idx_val, ]
   
-  # 3) One‐hot encode (to avoid categorical‐level limits)
+# One‐hot encode (to avoid categorical‐level limits)
   dv          <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
   train_dmy   <- predict(dv, newdata = train_data) %>% as.data.frame()
   train_dmy$transfer <- train_data$transfer
   valid_dmy   <- predict(dv, newdata = validation) %>% as.data.frame()
   valid_dmy$transfer <- validation$transfer
   
-  # 4) Fit RF on training 80%
+# Fit RF on training 80%
   rf_mod      <- randomForest(
     transfer ~ ., 
     data   = train_dmy, 
@@ -838,7 +838,7 @@ for (pos in positions) {
     mtry   = floor(sqrt(ncol(train_dmy) - 1))
   )
   
-  # 5) Predict & build tidy cm df
+# Predict & build tidy cm df
   preds       <- predict(rf_mod, valid_dmy)
   cm_matrix   <- confusionMatrix(preds, valid_dmy$transfer)
   df_cm       <- as.data.frame(cm_matrix$table)
@@ -874,7 +874,7 @@ set.seed(123)            # for reproducibility
 conf_plots <- list()
 
 for (pos in positions) {
-  # 1) Subset & clean
+ # Subset & clean
   pos_data <- subset(data, data[[pos]] == 1)
   pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
   pos_data$transfer <- factor(pos_data$transfer)
@@ -883,7 +883,7 @@ for (pos in positions) {
     next
   }
 
-  # 2) 60/20/20 split
+ # 60/20/20 split
   idx_train   <- createDataPartition(pos_data$transfer, p = 0.60, list = FALSE)
   train_data  <- pos_data[idx_train, ]
   temp_data   <- pos_data[-idx_train, ]
@@ -891,7 +891,7 @@ for (pos in positions) {
   test_data   <- temp_data[idx_test, ]
   validation  <- temp_data[-idx_test, ]
 
-  # 3) One‐hot encode (fit on train only)
+# One‐hot encode (fit on train only)
   dv         <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
   train_dmy  <- predict(dv, newdata = train_data)  %>% as.data.frame()
   train_dmy$transfer <- train_data$transfer
@@ -908,21 +908,21 @@ for (pos in positions) {
     mtry  = floor(sqrt(ncol(train_dmy) - 1))
   )
 
-  # 5) Predict on TEST (20%) and build CM df
+# Predict on TEST (20%) and build CM df
   test_preds <- predict(rf_mod, newdata = test_dmy[, setdiff(names(test_dmy), "transfer")])
   cm_test    <- confusionMatrix(test_preds, test_dmy$transfer)
   df_test    <- as.data.frame(cm_test$table)
   df_test$Proportion <- df_test$Freq / sum(df_test$Freq)
   df_test$Dataset    <- "Test"
 
-  # —and on VALIDATION (20%)
+# —and on VALIDATION (20%)
   valid_preds   <- predict(rf_mod, newdata = valid_dmy[, setdiff(names(valid_dmy), "transfer")])
   cm_valid      <- confusionMatrix(valid_preds, valid_dmy$transfer)
   df_valid      <- as.data.frame(cm_valid$table)
   df_valid$Proportion <- df_valid$Freq / sum(df_valid$Freq)
   df_valid$Dataset    <- "Validation"
 
-  # combine for plotting if you like, or plot separately
+# combine for plotting / plot separately
   df_cm <- rbind(df_test, df_valid)
   df_cm$Prediction <- factor(
     df_cm$Prediction,
@@ -935,7 +935,7 @@ for (pos in positions) {
     labels = c("no transfer","transferred")
   )
 
-  # 6) Plot both in facets
+# Plot both in facets
   title_str <- if (pos %in% names(pos_titles)) pos_titles[[pos]] else pos
   p <- ggplot(df_cm, aes(x = Prediction, y = Reference)) +
     geom_tile(fill = "white", color = "black") +
