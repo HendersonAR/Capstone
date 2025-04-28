@@ -9,6 +9,7 @@ library(ggplot2)
 library(caret)
 library(lightgbm)
 library(stringr)
+library(smotefamily)
 ```
 
 ```{r}
@@ -26,17 +27,17 @@ df_data <- cleaned_data[cleaned_data$DF == 1,]
 set.seed(278)
 fw_transfers <- fw_data[fw_data$transfer == 0,]
 fw_nontransfers <- fw_data[fw_data$transfer == 1,]
-fw_transfer_sample <- transfers[sample(nrow(fw_transfers), nrow(fw_nontransfers)),]
-fw_balanced_data <- rbind(fw_transfer_sample, fw_nontransfers)
+fw_transfer_sample <- fw_transfers[sample(nrow(fw_transfers), nrow(fw_nontransfers)),]
+fw_transfer_data <- rbind(fw_transfer_sample, fw_nontransfers)
 #class_penalty <- sum(fw_train_data$transfer == 0) / 
   #sum(fw_train_data$transfer == 1)
 ```
 
 ```{r}
-fw_trainingIndex <- createDataPartition(fw_balanced_data$transfer,
-                                        p = 0.7, list = FALSE)
-fw_train_data <- fw_balanced_data[fw_trainingIndex,]
-fw_test_data <- fw_balanced_data[-fw_trainingIndex, ]
+#fw_trainingIndex <- createDataPartition(fw_balanced_data$transfer,
+                                        #p = 0.7, list = FALSE)
+#fw_train_data <- fw_balanced_data[fw_trainingIndex,]
+#fw_test_data <- fw_balanced_data[-fw_trainingIndex, ]
 fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
 fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
 ```
@@ -215,7 +216,7 @@ ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8,
 set.seed(278)
 mf_transfers <- mf_data[mf_data$transfer == 0,]
 mf_nontransfers <- mf_data[mf_data$transfer == 1,]
-mf_transfer_sample <- transfers[sample(nrow(mf_transfers), nrow(mf_nontransfers)),]
+mf_transfer_sample <- mf_transfers[sample(nrow(mf_transfers), nrow(mf_nontransfers)),]
 mf_balanced_data <- rbind(mf_transfer_sample, mf_nontransfers)
 #mf_class_penalty <- sum(mf_train_data$transfer == 0) /
   #sum(mf_train_data$transfer == 1)
@@ -394,7 +395,7 @@ ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8,
 set.seed(278)
 df_transfers <- df_data[df_data$transfer == 0,]
 df_nontransfers <- df_data[df_data$transfer == 1,]
-df_transfer_sample <- transfers[sample(nrow(df_transfers), nrow(df_nontransfers)),]
+df_transfer_sample <- df_transfers[sample(nrow(df_transfers), nrow(df_nontransfers)),]
 df_balanced_data <- rbind(df_transfer_sample, df_nontransfers)
 ```
 
