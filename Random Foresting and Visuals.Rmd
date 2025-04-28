@@ -15,15 +15,20 @@ if (!require(caret)) install.packages("caret", dependencies = TRUE)
 
 library(randomForest)
 library(caret)
+library(dplyr)
+library(kableExtra)
+library(grid)
+library(gridExtra)
+library(stringr)
 ```
 
 ```{r}
 data <- read.csv("transfer_dataset.csv", stringsAsFactors = T)
+data <- data[, !names(data) %in% c("player", "season")]
+
 ```
 
 ```{r}
-str(data)
-summary(data)
 
 data$transfer <- as.factor(data$transfer)
 data$MF <- as.factor(data$MF)
@@ -33,38 +38,476 @@ data$FW <- as.factor(data$FW)
 data <- na.omit(data)
 ```
 
+## Normal RF without Sampling Adjustments
+
 ```{r}
-set.seed(82)
-trainIndex <- createDataPartition(data$transfer, p = 0.7, list = FALSE)
-trainData <- data[trainIndex, ]
-testData <- data[-trainIndex, ]
+set.seed(42)
+
+# Helper to split into Train (60%), Validation (20%), Test (20%)
+three_way_split <- function(df, response) {
+  # 60% Train
+  idx_train <- createDataPartition(df[[response]], p = 0.6, list = FALSE)
+  train <- df[idx_train, ]
+  temp  <- df[-idx_train, ]
+  # Of the remaining 40%, split half/half into validation & test (each 20% of original)
+  idx_val <- createDataPartition(temp[[response]], p = 0.5, list = FALSE)
+  validation <- temp[idx_val, ]
+  test       <- temp[-idx_val, ]
+  list(train = train, validation = validation, test = test)
+}
+
+# Positions to loop through
+positions <- c("MF", "FW", "DF")
+
+# Storage
+models_val     <- list()
+conf_matrices  <- list()
+
+for (pos in positions) {
+  
+  # 1) Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- as.factor(pos_data$transfer)
+  
+  if(nrow(pos_data) < 50) {
+    cat("Not enough data for", pos, "\n"); next
+  }
+  
+  #  Three-way split
+  splits <- three_way_split(pos_data, "transfer")
+  train      <- splits$train
+  validation <- splits$validation
+
+  
+  # Down-sample training only
+  down <- downSample(
+    x     = train[, setdiff(names(train), "transfer")],
+    y     = train$transfer,
+    yname = "transfer"
+  )
+  
+  # Train RF on down-sampled training set
+  rf_mod <- randomForest(
+    transfer ~ .,
+    data   = down,
+    ntree  = 500,
+    mtry   = floor(sqrt(ncol(down) - 1)),
+    importance = TRUE
+  )
+  models_val[[pos]] <- rf_mod
+  
+  # 5) Evaluate on the validation set
+  preds <- predict(rf_mod, validation)
+  cm    <- confusionMatrix(preds, validation$transfer)
+  conf_matrices[[pos]] <- cm
+  
+  cat("\n===", pos, "Players: Validation Performance ===\n")
+  print(cm)
+}
 
 ```
 
 ```{r}
-rf_model <- randomForest(transfer ~ . - season - player, 
-                         data = trainData, 
-                         ntree = 500,                            
-                         mtry = floor(sqrt(ncol(trainData) - 1)),
-                         importance = TRUE)
+library(caret)
+library(randomForest)
+
+set.seed(42)
+positions <- c("MF", "FW", "DF")
+
+for (pos in positions) {
+  
+  # Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season", "player", "MF", "FW", "DF")]
+  pos_data$transfer <- as.factor(pos_data$transfer)
+  
+  # Three‐way split: 60% train, 20% test, 20% validation
+  idx_train <- createDataPartition(pos_data$transfer, p = 0.6, list = FALSE)
+  trainData <- pos_data[idx_train, ]
+  temp      <- pos_data[-idx_train, ]
+  
+  idx_test  <- createDataPartition(temp$transfer, p = 0.5, list = FALSE)
+  testData  <- temp[idx_test, ]
+  validData <- temp[-idx_test, ]
+  
+  # Down‐sample and up‐sample the TRAINING set
+  train_down <- downSample(
+    x     = trainData[, setdiff(names(trainData), "transfer")],
+    y     = trainData$transfer,
+    yname = "transfer"
+  )
+  train_up <- upSample(
+    x     = trainData[, setdiff(names(trainData), "transfer")],
+    y     = trainData$transfer,
+    yname = "transfer"
+  )
+  
+  # Fit RF on each sampled training set
+  rf_down <- randomForest(
+    transfer ~ .,
+    data  = train_down,
+    ntree = 500,
+    mtry  = floor(sqrt(ncol(train_down) - 1))
+  )
+  rf_up <- randomForest(
+    transfer ~ .,
+    data  = train_up,
+    ntree = 500,
+    mtry  = floor(sqrt(ncol(train_up) - 1))
+  )
+  
+  # Predict & evaluate on VALIDATION set
+  cat("\n---", pos, "Players: Down‐Sampled Model (Validation) ---\n")
+  pred_val_down <- predict(rf_down, validData)
+  print(confusionMatrix(pred_val_down, validData$transfer))
+  
+  cat("\n---", pos, "Players: Up‐Sampled Model (Validation) ---\n")
+  pred_val_up <- predict(rf_up, validData)
+  print(confusionMatrix(pred_val_up, validData$transfer))
+}
+
+```
+## Creating Kable Table to compare results
+
+```{r}
+summary_df <- data.frame(
+  Position    = character(),
+  Sampling    = character(),
+  Dataset     = character(),
+  Accuracy    = numeric(),
+  Sensitivity = numeric(),
+  Specificity = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (pos in positions) {
+  
+  # ... your three‐way split, down/up‐sampling, and model fitting here ...
+  # (trainData, validData, rf_down, rf_up, testData, etc.)
+  
+  # Predict & evaluate on TEST set
+  cm_test_down <- confusionMatrix(predict(rf_down, testData), testData$transfer)
+  cm_test_up   <- confusionMatrix(predict(rf_up,   testData), testData$transfer)
+  
+  # Predict & evaluate on VALIDATION set
+  cm_val_down <- confusionMatrix(predict(rf_down, validData), validData$transfer)
+  cm_val_up   <- confusionMatrix(predict(rf_up,   validData), validData$transfer)
+  
+  # Append each result to summary_df
+  summary_df <- rbind(
+    summary_df,
+    data.frame(
+      Position    = pos,
+      Sampling    = "Down",
+      Dataset     = "Test",
+      Accuracy    = cm_test_down$overall["Accuracy"],
+      Sensitivity = cm_test_down$byClass["Sensitivity"],
+      Specificity = cm_test_down$byClass["Specificity"],
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      Position    = pos,
+      Sampling    = "Up",
+      Dataset     = "Test",
+      Accuracy    = cm_test_up$overall["Accuracy"],
+      Sensitivity = cm_test_up$byClass["Sensitivity"],
+      Specificity = cm_test_up$byClass["Specificity"],
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      Position    = pos,
+      Sampling    = "Down",
+      Dataset     = "Validation",
+      Accuracy    = cm_val_down$overall["Accuracy"],
+      Sensitivity = cm_val_down$byClass["Sensitivity"],
+      Specificity = cm_val_down$byClass["Specificity"],
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      Position    = pos,
+      Sampling    = "Up",
+      Dataset     = "Validation",
+      Accuracy    = cm_val_up$overall["Accuracy"],
+      Sensitivity = cm_val_up$byClass["Sensitivity"],
+      Specificity = cm_val_up$byClass["Specificity"],
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+# Finally, print the comparison table
+kable(
+  summary_df,
+  digits  = 3,
+  caption = "RF Performance by Position, Sampling & Dataset"
+)
 ```
 
 ```{r}
-print(rf_model)
+# --- Midfielders ---
+mf_data <- subset(data, MF == 1)
+mf_data$transfer <- factor(mf_data$transfer)
+mf_splits <- three_way_split(mf_data, "transfer")
+mf_train  <- mf_splits$train
+mf_val    <- mf_splits$validation
+
+# down‐sample & fit
+mf_down <- downSample(
+  x     = mf_train[, setdiff(names(mf_train), "transfer")],
+  y     = mf_train$transfer,
+  yname = "transfer"
+)
+mf_rf    <- randomForest(
+  transfer ~ .,
+  data   = mf_down,
+  ntree  = 500,
+  mtry   = floor(sqrt(ncol(mf_down) - 1))
+)
+
+# predictions & confusionMatrix
+mf_preds         <- predict(mf_rf, mf_val)
+mf_conf_matrix   <- confusionMatrix(factor(mf_preds), factor(mf_val$transfer))
+mf_conf_df       <- as.data.frame(mf_conf_matrix$table)
+mf_conf_df$Prediction <- factor(
+  mf_conf_df$Prediction,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+mf_conf_df$Reference  <- factor(
+  mf_conf_df$Reference,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+mf_total_obs     <- sum(mf_conf_matrix$table)
+mf_conf_df$Proportion <- mf_conf_df$Freq / mf_total_obs
+
+mf_conf_matrix_g <- ggplot(mf_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(
+    Freq, " (", sprintf("%.2f", Proportion * 100), "%)"
+  )), size = 5) +
+  theme_minimal() +
+  labs(
+    title = "Confusion Matrix – Midfielders",
+    x     = "Predicted Value",
+    y     = "True Value"
+  ) +
+  theme(
+    axis.text         = element_text(size = 13, color = "black"),
+    axis.text.y       = element_text(angle = 90, hjust = 0.5),
+    axis.title        = element_text(size = 13, color = "black"),
+    plot.title        = element_text(face = "bold", size = 14, hjust = 0.5)
+  )
+
+print(mf_conf_matrix_g)
+
+
+
+# --- Forwards ---
+fw_data <- subset(data, FW == 1)
+fw_data$transfer <- factor(fw_data$transfer)
+fw_splits <- three_way_split(fw_data, "transfer")
+fw_train  <- fw_splits$train
+fw_val    <- fw_splits$validation
+
+fw_down <- downSample(
+  x     = fw_train[, setdiff(names(fw_train), "transfer")],
+  y     = fw_train$transfer,
+  yname = "transfer"
+)
+fw_rf    <- randomForest(
+  transfer ~ .,
+  data   = fw_down,
+  ntree  = 500,
+  mtry   = floor(sqrt(ncol(fw_down) - 1))
+)
+
+fw_preds       <- predict(fw_rf, fw_val)
+fw_conf_matrix <- confusionMatrix(factor(fw_preds), factor(fw_val$transfer))
+fw_conf_df     <- as.data.frame(fw_conf_matrix$table)
+fw_conf_df$Prediction <- factor(
+  fw_conf_df$Prediction,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+fw_conf_df$Reference  <- factor(
+  fw_conf_df$Reference,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+fw_total_obs   <- sum(fw_conf_matrix$table)
+fw_conf_df$Proportion <- fw_conf_df$Freq / fw_total_obs
+
+fw_conf_matrix_g <- ggplot(fw_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(
+    Freq, " (", sprintf("%.2f", Proportion * 100), "%)"
+  )), size = 5) +
+  theme_minimal() +
+  labs(
+    title = "Confusion Matrix – Forwards",
+    x     = "Predicted Value",
+    y     = "True Value"
+  ) +
+  theme(
+    axis.text         = element_text(size = 13, color = "black"),
+    axis.text.y       = element_text(angle = 90, hjust = 0.5),
+    axis.title        = element_text(size = 13, color = "black"),
+    plot.title        = element_text(face = "bold", size = 14, hjust = 0.5)
+  )
+
+print(fw_conf_matrix_g)
+
+
+
+# --- Defenders ---
+df_data <- subset(data, DF == 1)
+df_data$transfer <- factor(df_data$transfer)
+df_splits <- three_way_split(df_data, "transfer")
+df_train  <- df_splits$train
+df_val    <- df_splits$validation
+
+df_down <- downSample(
+  x     = df_train[, setdiff(names(df_train), "transfer")],
+  y     = df_train$transfer,
+  yname = "transfer"
+)
+df_rf    <- randomForest(
+  transfer ~ .,
+  data   = df_down,
+  ntree  = 500,
+  mtry   = floor(sqrt(ncol(df_down) - 1))
+)
+
+df_preds       <- predict(df_rf, df_val)
+df_conf_matrix <- confusionMatrix(factor(df_preds), factor(df_val$transfer))
+df_conf_df     <- as.data.frame(df_conf_matrix$table)
+df_conf_df$Prediction <- factor(
+  df_conf_df$Prediction,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+df_conf_df$Reference  <- factor(
+  df_conf_df$Reference,
+  levels = c("0","1"),
+  labels = c("no transfer","transferred")
+)
+df_total_obs   <- sum(df_conf_matrix$table)
+df_conf_df$Proportion <- df_conf_df$Freq / df_total_obs
+
+df_conf_matrix_g <- ggplot(df_conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(
+    Freq, " (", sprintf("%.2f", Proportion * 100), "%)"
+  )), size = 5) +
+  theme_minimal() +
+  labs(
+    title = "Confusion Matrix – Defenders",
+    x     = "Predicted Value",
+    y     = "True Value"
+  ) +
+  theme(
+    axis.text         = element_text(size = 13, color = "black"),
+    axis.text.y       = element_text(angle = 90, hjust = 0.5),
+    axis.title        = element_text(size = 13, color = "black"),
+    plot.title        = element_text(face = "bold", size = 14, hjust = 0.5)
+  )
+
+print(df_conf_matrix_g)
+
 ```
 ```{r}
-predictions <- predict(rf_model, testData)
+plot_pos_cm <- function(pos, samp_type, df, splits_fn) {
+  
+  pos_data <- subset(df, df[[pos]] == 1)
+  pos_data$transfer <- factor(pos_data$transfer)
+  if (nrow(pos_data) < 50) return(NULL)
+  
+  # split
+  sp    <- splits_fn(pos_data, "transfer")
+  train <- sp$train
+  valid <- sp$validation
+  
+  # sample
+  if (samp_type == "Down") {
+    sampled <- downSample(
+      x     = train[, setdiff(names(train), "transfer")],
+      y     = train$transfer,
+      yname = "transfer"
+    )
+  } else {
+    sampled <- upSample(
+      x     = train[, setdiff(names(train), "transfer")],
+      y     = train$transfer,
+      yname = "transfer"
+    )
+  }
+  
+  # fit
+  rf_mod <- randomForest(
+    transfer ~ .,
+    data   = sampled,
+    ntree  = 500,
+    mtry   = floor(sqrt(ncol(sampled) - 1))
+  )
+  
+  # predict & cm
+  preds      <- predict(rf_mod, valid)
+  cm_matrix  <- confusionMatrix(factor(preds), valid$transfer)
+  df_cm      <- as.data.frame(cm_matrix$table)
+  
+  # relabel
+  df_cm$Prediction <- factor(
+    df_cm$Prediction,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Reference  <- factor(
+    df_cm$Reference,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  
+  # proportion
+  total <- sum(df_cm$Freq)
+  df_cm$Proportion <- df_cm$Freq / total
+  
+  # plot
+  ggplot(df_cm, aes(x = Prediction, y = Reference)) +
+    geom_tile(fill = "white", color = "black") +
+    geom_text(aes(label = paste0(
+      Freq, " (", sprintf("%.2f", Proportion * 100), "%)"
+    )), size = 5) +
+    theme_minimal() +
+    labs(
+      title = paste("Confusion Matrix –", pos, "(", samp_type, "Sampling)"),
+      x     = "Predicted Value",
+      y     = "True Value"
+    ) +
+    theme(
+      axis.text         = element_text(size = 13, color = "black"),
+      axis.text.y       = element_text(angle = 90, hjust = 0.5),
+      axis.title        = element_text(size = 13, color = "black"),
+      plot.title        = element_text(face = "bold", size = 14, hjust = 0.5)
+    )
+}
+
+# positions and sampling types
+positions  <- c("MF","FW","DF")
+samplings  <- c("Down","Up")
+
+# iterate & print plots
+set.seed(42)
+for (pos in positions) {
+  for (s in samplings) {
+    p <- plot_pos_cm(pos, s, data, three_way_split)
+    if (!is.null(p)) print(p)
+  }
+}
 ```
 
 
-```{r}
-confMat <- confusionMatrix(predictions, testData$transfer)
-print(confMat)
-```
-```{r}
-varImpPlot(rf_model)
-
-```
 
 Random Forest Models / Position
 
@@ -80,17 +523,24 @@ for (pos in positions) {
   pos_data <- pos_data[, !(names(pos_data) %in% c("season", "player", "MD", "FW", "DF"))]
   pos_data$transfer <- as.factor(pos_data$transfer)
   
-  if(nrow(pos_data) < 10) {
+  if (nrow(pos_data) < 10) {
     cat("Not enough data for position", pos, "\n")
     next
   }
-   set.seed(42)
-   
-  trainIndex <- createDataPartition(pos_data$transfer, p = 0.7, list = FALSE)
-  trainData <- pos_data[trainIndex, ]
-  testData <- pos_data[-trainIndex, ]
   
-  # Random Forest model
+  # upSample to upsample ds
+  # downSample to downsample ds
+  ds <- upSample(x = pos_data[, setdiff(names(pos_data), "transfer")],
+                   y = pos_data$transfer,
+                   yname = "transfer")
+  
+  # Split the downsampled data into training and testing sets
+  set.seed(42)
+  trainIndex <- createDataPartition(ds$transfer, p = 0.7, list = FALSE)
+  trainData <- ds[trainIndex, ]
+  testData <- ds[-trainIndex, ]
+  
+  # Train the Random Forest model on the balanced dataset
   rf_model <- randomForest(transfer ~ ., 
                            data = trainData, 
                            ntree = 500, 
@@ -99,7 +549,7 @@ for (pos in positions) {
   
   models[[pos]] <- rf_model
   
-  # Predictions on the test set
+  # Make predictions on the test set
   predictions <- predict(rf_model, testData)
   
   # Evaluate the model performance
@@ -132,5 +582,380 @@ print(models[["DF"]])
 plot(models[["DF"]], main = "OOB Error for DF Players")
 varImpPlot(models[["DF"]], main = "Variable Importance for DF Players")
 
+```
+
+```{r}
+oob_data <- data.frame(
+  trees = 1:nrow(models[["MF"]]$err.rate),
+  OOB_Error = models[["MF"]]$err.rate[,"OOB"]
+)
+
+library(ggplot2)
+ggplot(oob_data, aes(x = trees, y = OOB_Error)) +
+  geom_line(color = "blue", size = 1.2) +
+  labs(
+    title = "OOB Error Rate for MF Players",
+    x = "Number of Trees",
+    y = "OOB Error"
+  ) +
+  theme_minimal()
+
+importanceMF <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceMF <- importanceMF[order(importanceMF$Importance, decreasing = TRUE), ]
+importanceMF$Variable <- str_to_title(gsub("_", " ", importanceMF$Variable))
+importanceMF$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceMF))
+
+ggplot(importanceMF, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Midfielders (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importanceDF <- data.frame(
+  Variable = rownames(models[["DF"]]$importance),
+  Importance = models[["DF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceDF<- importanceDF[order(importanceDF$Importance, decreasing = TRUE), ]
+importanceDF$Variable <- str_to_title(gsub("_", " ", importanceDF$Variable))
+importanceDF$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceDF))
+
+ggplot(importanceDF, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Defenders (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importanceFW <- data.frame(
+  Variable = rownames(models[["FW"]]$importance),
+  Importance = models[["FW"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceFW <- importanceFW[order(importanceFW$Importance, decreasing = TRUE), ]
+importanceFW$Variable <- str_to_title(gsub("_", " ", importanceFW$Variable))
+importanceFW$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceFW))
+
+ggplot(importanceFW, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Forwards (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+```
+```{r}
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+kable(performance_table, 
+      caption = "RF Model Performance Metrics by Position",
+      col.names = c("Position", "Accuracy", "Sensitivity", "Specificity"))
+
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+# Create a title for the summary table
+summary_title <- textGrob("RF Model Performance Metrics by Position",
+                            gp = gpar(fontsize = 14, fontface = "bold"))
+
+# Convert the summary data frame into a table graphic
+performance_table_grob <- tableGrob(performance_table)
+
+# Arrange the title and table vertically
+grid.arrange(summary_title, performance_table_grob, 
+             nrow = 2, 
+             heights = c(0.15, 0.85))
+
+
+# Now, loop over each confusion matrix to display it nicely
+for (pos in names(conf_matrices)) {
+  # Create a title for each confusion matrix
+  cm_title <- textGrob(paste("Confusion Matrix for", pos, "Players"),
+                       gp = gpar(fontsize = 14, fontface = "bold"))
+  # Convert the confusion matrix table into a table graphic
+  cm_grob <- tableGrob(as.table(conf_matrices[[pos]]$table))
+  
+  # Arrange the title and the matrix table together
+  grid.arrange(cm_title, cm_grob, 
+               nrow = 2, 
+               heights = c(0.15, 0.85))
+}
+
+```
+```{r}
+importance_data <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Remove underscores, replace with spaces, and convert text to title case
+importance_data$Variable <- str_to_title(gsub("_", " ", importance_data$Variable))
+
+# Order the data by importance, descending
+importance_data <- importance_data[order(importance_data$Importance, decreasing = TRUE), ]
+
+# Create an alternating color vector (for example, between "steelblue" and "tomato")
+importance_data$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importance_data))
+
+# Plot the variable importance using ggplot2 with the cleaned labels
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance (MeanDecreaseAccuracy)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importance_data <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Remove underscores, replace with spaces, and convert text to title case
+importance_data$Variable <- str_to_title(gsub("_", " ", importance_data$Variable))
+
+# Order the data by importance, descending
+importance_data <- importance_data[order(importance_data$Importance, decreasing = TRUE), ]
+
+# Create an alternating color vector (for example, between "steelblue" and "tomato")
+importance_data$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importance_data))
+
+# Plot the variable importance using ggplot2 with the cleaned labels
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance (MeanDecreaseAccuracy)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+```
+
+```{r}
+set.seed(42)
+
+positions <- c("MF", "FW", "DF")
+validation_sets <- list()
+
+for (pos in positions) {
+  # Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 50) {
+    warning("Not enough data for ", pos, "—skipping validation split")
+    next
+  }
+  
+  # Create a 20% validation split
+  idx_val <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
+  validation_sets[[pos]] <- pos_data[idx_val, ]
+  
+  # (Optional) the remaining 80% you can grab with:
+  # train_sets[[pos]] <- pos_data[-idx_val, ]
+}
+```
+
+```{r}
+for (pos in positions) {
+  # 1) Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 50) {
+    message("Skipping ", pos, ": too few rows")
+    next
+  }
+  
+#  Validation split (20%)
+  idx_val     <- createDataPartition(pos_data$transfer, p = 0.2, list = FALSE)
+  validation  <- pos_data[idx_val, ]
+  train_data  <- pos_data[-idx_val, ]
+  
+# One‐hot encode (to avoid categorical‐level limits)
+  dv          <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
+  train_dmy   <- predict(dv, newdata = train_data) %>% as.data.frame()
+  train_dmy$transfer <- train_data$transfer
+  valid_dmy   <- predict(dv, newdata = validation) %>% as.data.frame()
+  valid_dmy$transfer <- validation$transfer
+  
+# Fit RF on training 80%
+  rf_mod      <- randomForest(
+    transfer ~ ., 
+    data   = train_dmy, 
+    ntree  = 500, 
+    mtry   = floor(sqrt(ncol(train_dmy) - 1))
+  )
+  
+# Predict & build tidy cm df
+  preds       <- predict(rf_mod, valid_dmy)
+  cm_matrix   <- confusionMatrix(preds, valid_dmy$transfer)
+  df_cm       <- as.data.frame(cm_matrix$table)
+  total_obs   <- sum(df_cm$Freq)
+  
+  df_cm$Prediction <- factor(
+    df_cm$Prediction,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Reference  <- factor(
+    df_cm$Reference,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Proportion <- round(df_cm$Freq / total_obs, 3)
+  
+  # 6) Print in exact format
+  cat("\n---", pos, "Validation Confusion Matrix ---\n")
+  print(df_cm, row.names = FALSE)
+}
+
+```
+
+```{r}
+pos_titles <- c(
+  FW = "Forwards",
+  MF = "Midfielders",
+  DF = "Defenders"
+)
+
+set.seed(123)            # for reproducibility
+conf_plots <- list()
+
+for (pos in positions) {
+ # Subset & clean
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !names(pos_data) %in% c("season","player","MF","FW","DF")]
+  pos_data$transfer <- factor(pos_data$transfer)
+  if (nrow(pos_data) < 50) {
+    message("Skipping ", pos, ": too few rows")
+    next
+  }
+
+ # 60/20/20 split
+  idx_train   <- createDataPartition(pos_data$transfer, p = 0.60, list = FALSE)
+  train_data  <- pos_data[idx_train, ]
+  temp_data   <- pos_data[-idx_train, ]
+  idx_test    <- createDataPartition(temp_data$transfer, p = 0.50, list = FALSE)
+  test_data   <- temp_data[idx_test, ]
+  validation  <- temp_data[-idx_test, ]
+
+# One‐hot encode (fit on train only)
+  dv         <- dummyVars(transfer ~ ., data = train_data, fullRank = TRUE)
+  train_dmy  <- predict(dv, newdata = train_data)  %>% as.data.frame()
+  train_dmy$transfer <- train_data$transfer
+  test_dmy   <- predict(dv, newdata = test_data)   %>% as.data.frame()
+  test_dmy$transfer  <- test_data$transfer
+  valid_dmy  <- predict(dv, newdata = validation)  %>% as.data.frame()
+  valid_dmy$transfer <- validation$transfer
+
+  # 4) Fit RF on the 60%
+  rf_mod <- randomForest(
+    transfer ~ .,
+    data  = train_dmy,
+    ntree = 500,
+    mtry  = floor(sqrt(ncol(train_dmy) - 1))
+  )
+
+# Predict on TEST (20%) and build CM df
+  test_preds <- predict(rf_mod, newdata = test_dmy[, setdiff(names(test_dmy), "transfer")])
+  cm_test    <- confusionMatrix(test_preds, test_dmy$transfer)
+  df_test    <- as.data.frame(cm_test$table)
+  df_test$Proportion <- df_test$Freq / sum(df_test$Freq)
+  df_test$Dataset    <- "Test"
+
+# —and on VALIDATION (20%)
+  valid_preds   <- predict(rf_mod, newdata = valid_dmy[, setdiff(names(valid_dmy), "transfer")])
+  cm_valid      <- confusionMatrix(valid_preds, valid_dmy$transfer)
+  df_valid      <- as.data.frame(cm_valid$table)
+  df_valid$Proportion <- df_valid$Freq / sum(df_valid$Freq)
+  df_valid$Dataset    <- "Validation"
+
+# combine for plotting / plot separately
+  df_cm <- rbind(df_test, df_valid)
+  df_cm$Prediction <- factor(
+    df_cm$Prediction,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+  df_cm$Reference <- factor(
+    df_cm$Reference,
+    levels = c("0","1"),
+    labels = c("no transfer","transferred")
+  )
+
+# Plot both in facets
+  title_str <- if (pos %in% names(pos_titles)) pos_titles[[pos]] else pos
+  p <- ggplot(df_cm, aes(x = Prediction, y = Reference)) +
+    geom_tile(fill = "white", color = "black") +
+    geom_text(aes(label = paste0(Freq,
+                                 " (", sprintf("%.2f", Proportion * 100), "%)")),
+              size = 5) +
+    facet_wrap(~ Dataset) +
+    theme_minimal() +
+    labs(title = paste("Confusion Matrix –", title_str),
+         x     = "Predicted Value",
+         y     = "True Value") +
+    theme(
+      axis.text.y  = element_text(size = 13, color = "black", angle = 90, hjust = 0.5),
+      axis.title.y = element_text(size = 13, color = "black"),
+      axis.text.x  = element_text(size = 13, color = "black"),
+      axis.title.x = element_text(size = 13, color = "black")
+    )
+
+  print(p)
+  conf_plots[[pos]] <- p
+}
 ```
 

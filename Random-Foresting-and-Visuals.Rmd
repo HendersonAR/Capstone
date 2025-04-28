@@ -1,0 +1,348 @@
+---
+title: "Random Forest, Visuals"
+author: "Andrew Henderson"
+date: "2025-03-31"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+if (!require(randomForest)) install.packages("randomForest", dependencies = TRUE)
+if (!require(caret)) install.packages("caret", dependencies = TRUE)
+
+library(randomForest)
+library(caret)
+library(dplyr)
+library(kableExtra)
+library(grid)
+library(gridExtra)
+library(stringr)
+```
+
+```{r}
+data <- read.csv("transfer_dataset.csv", stringsAsFactors = T)
+```
+
+```{r}
+str(data)
+summary(data)
+
+data$transfer <- as.factor(data$transfer)
+data$MF <- as.factor(data$MF)
+data$DF <- as.factor(data$DF)
+data$FW <- as.factor(data$FW)
+
+data <- na.omit(data)
+```
+
+```{r}
+set.seed(82)
+mf_down <- downSample(x = data[, setdiff(names(data), "transfer")],
+                      y = data$transfer,
+                      yname = "transfer")
+
+trainIndex <- createDataPartition(mf_down$transfer, p = 0.7, list = FALSE)
+trainData <- mf_down[trainIndex, ]
+testData <- mf_down[-trainIndex, ]
+
+```
+
+```{r}
+rf_model <- randomForest(transfer ~ . - season - player, 
+                         data = trainData, 
+                         ntree = 100,                            
+                         mtry = floor(sqrt(ncol(trainData) - 1)),
+                         importance = TRUE)
+```
+
+```{r}
+print(rf_model)
+```
+```{r}
+predictions <- predict(rf_model, testData)
+```
+
+
+```{r}
+confMat <- confusionMatrix(predictions, testData$transfer)
+print(confMat)
+```
+```{r}
+varImpPlot(rf_model)
+
+```
+
+Random Forest Models / Position
+
+```{r}
+positions <- c("MF", "FW", "DF")
+
+models <- list()
+conf_matrices <- list()
+
+for (pos in positions) {
+  
+  pos_data <- subset(data, data[[pos]] == 1)
+  pos_data <- pos_data[, !(names(pos_data) %in% c("season", "player", "MD", "FW", "DF"))]
+  pos_data$transfer <- as.factor(pos_data$transfer)
+  
+  if (nrow(pos_data) < 10) {
+    cat("Not enough data for position", pos, "\n")
+    next
+  }
+  
+  # upSample to upsample ds
+  # downSample to downsample ds
+  ds <- upSample(x = pos_data[, setdiff(names(pos_data), "transfer")],
+                   y = pos_data$transfer,
+                   yname = "transfer")
+  
+  # Split the downsampled data into training and testing sets
+  set.seed(42)
+  trainIndex <- createDataPartition(ds$transfer, p = 0.7, list = FALSE)
+  trainData <- ds[trainIndex, ]
+  testData <- ds[-trainIndex, ]
+  
+  # Train the Random Forest model on the balanced dataset
+  rf_model <- randomForest(transfer ~ ., 
+                           data = trainData, 
+                           ntree = 500, 
+                           mtry = floor(sqrt(ncol(trainData) - 1)), 
+                           importance = TRUE)
+  
+  models[[pos]] <- rf_model
+  
+  # Make predictions on the test set
+  predictions <- predict(rf_model, testData)
+  
+  # Evaluate the model performance
+  conf_mat <- confusionMatrix(predictions, testData$transfer)
+  conf_matrices[[pos]] <- conf_mat
+  
+  cat("Confusion Matrix for", pos, "players:\n")
+  print(conf_mat)
+  cat("\n---------------------------------\n")
+}
+```
+
+```{r}
+#MF players:
+cat("Model summary for MF players:\n")
+print(models[["MF"]])
+plot(models[["MF"]], main = "OOB Error for MD Players")
+varImpPlot(models[["MF"]], main = "Variable Importance for MD Players")
+
+#FW players:
+cat("Model summary for FW players:\n")
+print(models[["FW"]])
+plot(models[["FW"]], main = "OOB Error for FW Players")
+varImpPlot(models[["FW"]], main = "Variable Importance for FW Players")
+
+
+#DF players:
+cat("Model summary for DF players:\n")
+print(models[["DF"]])
+plot(models[["DF"]], main = "OOB Error for DF Players")
+varImpPlot(models[["DF"]], main = "Variable Importance for DF Players")
+
+```
+
+```{r}
+oob_data <- data.frame(
+  trees = 1:nrow(models[["MF"]]$err.rate),
+  OOB_Error = models[["MF"]]$err.rate[,"OOB"]
+)
+
+library(ggplot2)
+ggplot(oob_data, aes(x = trees, y = OOB_Error)) +
+  geom_line(color = "blue", size = 1.2) +
+  labs(
+    title = "OOB Error Rate for MF Players",
+    x = "Number of Trees",
+    y = "OOB Error"
+  ) +
+  theme_minimal()
+
+importanceMF <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceMF <- importanceMF[order(importanceMF$Importance, decreasing = TRUE), ]
+importanceMF$Variable <- str_to_title(gsub("_", " ", importanceMF$Variable))
+importanceMF$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceMF))
+
+ggplot(importanceMF, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Midfielders (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importanceDF <- data.frame(
+  Variable = rownames(models[["DF"]]$importance),
+  Importance = models[["DF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceDF<- importanceDF[order(importanceDF$Importance, decreasing = TRUE), ]
+importanceDF$Variable <- str_to_title(gsub("_", " ", importanceDF$Variable))
+importanceDF$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceDF))
+
+ggplot(importanceDF, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Defenders (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importanceFW <- data.frame(
+  Variable = rownames(models[["FW"]]$importance),
+  Importance = models[["FW"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Order variables by importance
+importanceFW <- importanceFW[order(importanceFW$Importance, decreasing = TRUE), ]
+importanceFW$Variable <- str_to_title(gsub("_", " ", importanceFW$Variable))
+importanceFW$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importanceFW))
+
+ggplot(importanceFW, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance for Forwards (MDA)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+```
+```{r}
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+kable(performance_table, 
+      caption = "RF Model Performance Metrics by Position",
+      col.names = c("Position", "Accuracy", "Sensitivity", "Specificity"))
+
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+performance_table <- do.call(rbind, lapply(names(conf_matrices), function(pos) {
+  cm <- conf_matrices[[pos]]
+  data.frame(
+    Position = pos,
+    Accuracy = round(as.numeric(cm$overall["Accuracy"]), 3),
+    Sensitivity = round(as.numeric(cm$byClass["Sensitivity"]), 3),
+    Specificity = round(as.numeric(cm$byClass["Specificity"]), 3)
+  )
+}))
+
+# Create a title for the summary table
+summary_title <- textGrob("RF Model Performance Metrics by Position",
+                            gp = gpar(fontsize = 14, fontface = "bold"))
+
+# Convert the summary data frame into a table graphic
+performance_table_grob <- tableGrob(performance_table)
+
+# Arrange the title and table vertically
+grid.arrange(summary_title, performance_table_grob, 
+             nrow = 2, 
+             heights = c(0.15, 0.85))
+
+
+# Now, loop over each confusion matrix to display it nicely
+for (pos in names(conf_matrices)) {
+  # Create a title for each confusion matrix
+  cm_title <- textGrob(paste("Confusion Matrix for", pos, "Players"),
+                       gp = gpar(fontsize = 14, fontface = "bold"))
+  # Convert the confusion matrix table into a table graphic
+  cm_grob <- tableGrob(as.table(conf_matrices[[pos]]$table))
+  
+  # Arrange the title and the matrix table together
+  grid.arrange(cm_title, cm_grob, 
+               nrow = 2, 
+               heights = c(0.15, 0.85))
+}
+
+```
+```{r}
+importance_data <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Remove underscores, replace with spaces, and convert text to title case
+importance_data$Variable <- str_to_title(gsub("_", " ", importance_data$Variable))
+
+# Order the data by importance, descending
+importance_data <- importance_data[order(importance_data$Importance, decreasing = TRUE), ]
+
+# Create an alternating color vector (for example, between "steelblue" and "tomato")
+importance_data$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importance_data))
+
+# Plot the variable importance using ggplot2 with the cleaned labels
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance (MeanDecreaseAccuracy)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+
+importance_data <- data.frame(
+  Variable = rownames(models[["MF"]]$importance),
+  Importance = models[["MF"]]$importance[,"MeanDecreaseAccuracy"]
+)
+
+# Remove underscores, replace with spaces, and convert text to title case
+importance_data$Variable <- str_to_title(gsub("_", " ", importance_data$Variable))
+
+# Order the data by importance, descending
+importance_data <- importance_data[order(importance_data$Importance, decreasing = TRUE), ]
+
+# Create an alternating color vector (for example, between "steelblue" and "tomato")
+importance_data$Color <- rep(c("steelblue", "tomato"), length.out = nrow(importance_data))
+
+# Plot the variable importance using ggplot2 with the cleaned labels
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Color)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance (MeanDecreaseAccuracy)",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  scale_fill_identity() +
+  theme_minimal()
+```
+

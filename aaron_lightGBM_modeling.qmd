@@ -5,8 +5,7 @@ editor: visual
 ---
 
 ```{r}
-install.packages("lightgbm")
-install.packages("caret")
+library(ggplot2)
 library(caret)
 library(lightgbm)
 ```
@@ -15,13 +14,21 @@ library(lightgbm)
 data <- read.csv("transfer_dataset.csv")
 cleaned_data <- na.omit(data)
 
+# balance classes
+transfers <- cleaned_data[cleaned_data$transfer == 0,]
+nontransfers <- cleaned_data[cleaned_data$transfer == 1,]
+transfer_sample <- transfers[sample(nrow(transfers), nrow(nontransfers)),]
+balanced_data <- rbind(transfer_sample, nontransfers)
 ```
 
 ```{r}
 set.seed(278)
-trainingIndex <- createDataPartition(cleaned_data$transfer, p = 0.8, list = FALSE)
-train_data <- cleaned_data[trainingIndex,]
-test_data <- cleaned_data[-trainingIndex, ]
+trainingIndex <- createDataPartition(balanced_data$transfer, p = 0.7, list = FALSE)
+train_data <- balanced_data[trainingIndex,]
+test_data <- balanced_data[-trainingIndex, ]
+train_data <- train_data[, setdiff(names(train_data), "name")]
+test_data <- test_data[, setdiff(names(test_data), "name")]
+
 ```
 
 ```{r}
@@ -32,9 +39,14 @@ lgbtest <- lgb.Dataset(data = as.matrix(test_data[, setdiff(names(test_data), "t
 ```{r}
 parameters <- list(
   objective = "binary",
+  metric = "auc",
+  #scale_pos_weight = sum(train_data$transfer == 0) / sum(train_data$transfer == 1),
   boosting_type = "gbdt",
   learning_rate = 0.075,
-  num_leaves = 100
+  num_leaves = 65,
+  bagging_fraction = 0.8,
+  feature_fraction = 0.8,
+  max_depth = -1
 )
 ```
 
@@ -42,10 +54,11 @@ parameters <- list(
 gbm_model <- lgb.train(
   params = parameters,
   data = lgbtrain,
-  nrounds = 100,
+  nrounds = 250,
   valids = list(test = lgbtest),
   early_stopping_rounds = 10
 )
+
 ```
 
 ```{r}
@@ -58,4 +71,162 @@ binary_predictions <- ifelse(predictions > 0.5, 1, 0)
 
 accuracy <- mean(binary_predictions == test_data$transfer)
 cat("Accuracy:", accuracy, "\n")
+```
+
+ROC Graph
+
+```{r}
+library(pROC)
+roc_obj <- roc(test_data$transfer, predictions)
+general_auc <- auc(roc_obj)
+
+roc_data <- data.frame(TPR = roc_obj$sensitivities,
+  FPR = 1 - roc_obj$specificities,
+  Thresholds = roc_obj$thresholds
+)
+roc_g <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "blue") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "ROC Curve for General LightGbm Model (Undersampled)",
+       x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal() +
+  annotate("text", x = 0.9, y = 0, label = paste("AUC =", round(general_auc, 3)),
+           size = 5, color = "black")
+
+roc_g
+```
+
+Model Statistics
+
+```{r}
+if (!require(knitr)) install.packages("knitr")
+library(knitr)
+
+# Binary predictions from the model
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+
+# Compute confusion matrix
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
+# Extract relevant metrics
+accuracy <- conf_matrix$overall["Accuracy"]
+precision <- conf_matrix$byClass["Precision"]
+f1_score <- conf_matrix$byClass["F1"]
+
+# Create a data frame for the metrics
+metrics_df <- data.frame(
+  Metric = c("Accuracy", "Precision", "F1", "AUC"),
+  Value = unname(c(accuracy, precision, f1_score, general_auc))
+)
+
+# Use kable to create a formatted table
+kable(metrics_df, col.names = c("Metric", "Value"), caption = "General Model Undersampling Metrics")
+```
+
+Precision-Recall Curve
+
+```{r}
+# Calculate Precision and Recall
+thresholds <- seq(0, 1, by = 0.01)
+precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(predicted_labels)
+})
+recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+pr_curve_g <- plot(recall, precision, type = "l", col = "red", main = "Precision-Recall Curve",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+pr_curve_g
+```
+
+```{r}
+# Create Confusion Matrix
+binary_predictions <- ifelse(predictions > 0.5, 1, 0)
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
+conf_matrix <- confusionMatrix(factor(binary_predictions),
+                               factor(test_data$transfer))
+
+conf_df <- as.data.frame(conf_matrix$table)
+conf_df$Prediction <- factor(conf_df$Prediction, levels = c(0, 1),
+                             labels = c("no transfer", "transferred"))
+conf_df$Reference <- factor(conf_df$Reference, levels = c(0,1),
+                            labels = c("no transfer", "transferred"))
+total_obs <- sum(conf_matrix$table)
+conf_df$Proportion <- conf_df$Freq / total_obs
+conf_matrix_g <- ggplot(data = conf_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(fill = "white", color = "black") +
+  geom_text(aes(label = paste0(Freq,
+                               " (", sprintf("%.2f", Proportion * 100), "%)")), size = 5) +
+  theme_minimal() +
+  labs(title = "General Model Confusion Matrix - Undersampling",
+       fill = "Frequency",
+       x = "Predicted Value", y = "True Value") +
+  theme(axis.text.y = (element_text(size = 13, color = "black", angle = 90,
+                                    hjust = 0.5)),
+        axis.title.y = (element_text(size = 13, color = "black")),
+        axis.text.x = (element_text(size = 13, color = "black")),
+        axis.title.x = (element_text(size = 13, color = "black")))
+
+conf_matrix_g
+```
+
+```{r}
+# Calculate Precision and Recall
+thresholds <- seq(0, 1, by = 0.01)
+precision <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(predicted_labels)
+})
+recall <- sapply(thresholds, function(thresh) {
+  predicted_labels <- ifelse(predictions > thresh, 1, 0)
+  sum(predicted_labels & test_data$transfer) / sum(test_data$transfer)
+})
+
+# Plot Precision-Recall Curve
+pr_curve_g <- plot(recall, precision, type = "l", col = "red", main = "Precision-Recall Curve",
+     xlim = c(0,1), ylim = c(0,1), xlab = "Recall", ylab = "Precision")
+pr_curve_g
+```
+
+```{r}
+library(stringr)
+importance <- lgb.importance(gbm_model)
+importance_df <- as.data.frame(importance)
+importance_df$Feature <- str_replace_all(importance_df$Feature, "_", " ")
+
+variable_importance_g <- ggplot(importance_df, aes(x = reorder(Feature, Gain),
+                                                   y = Gain)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 0.125)) +
+  theme_minimal() +
+  labs(title = "Feature Importance for General LightGbm Model", x = "Feature",
+       y = "Gain (Improvement in Log Loss When Splitting)")
+
+variable_importance_g
+```
+
+Save Plots
+
+```{r}
+ggsave("undersampling_roc.png", plot = roc_g, width = 8, height = 6, bg = "white")
+ggsave("undersampling_conf_matrix2.png",
+       plot = conf_matrix_g, width = 8, height = 6, bg = "white")
+ggsave("undersampling_var_import2.png", plot = variable_importance_g, width = 8, 
+       height = 6, bg = "white")
+```
+
+```{r}
+ggsave("undersampling_roc.png", plot = roc_g, width = 8, height = 6, bg = "white")
+ggsave("undersampling_conf_matrix2.png",
+       plot = conf_matrix_g, width = 8, height = 6, bg = "white")
+ggsave("undersampling_var_import2.png", plot = variable_importance_g, width = 8, 
+       height = 6, bg = "white")
 ```
