@@ -9,6 +9,8 @@ library(ggplot2)
 library(caret)
 library(lightgbm)
 library(stringr)
+library(themis)
+library(dplyr)
 library(smotefamily)
 ```
 
@@ -18,6 +20,9 @@ cleaned_data <- na.omit(data)
 fw_data <- cleaned_data[cleaned_data$FW == 1,]
 mf_data <- cleaned_data[cleaned_data$MF == 1,]
 df_data <- cleaned_data[cleaned_data$DF == 1,]
+fw_data <- fw_data %>% select(-c("player", "season"))
+mf_data <- mf_data %>% select(-c("player", "season"))
+df_data <- df_data %>% select(-c("player", "season"))
 ```
 
 **Forward Model**
@@ -25,25 +30,34 @@ df_data <- cleaned_data[cleaned_data$DF == 1,]
 ```{r}
 # forward model
 set.seed(278)
-fw_transfers <- fw_data[fw_data$transfer == 0,]
-fw_nontransfers <- fw_data[fw_data$transfer == 1,]
-fw_transfer_sample <- fw_transfers[sample(nrow(fw_transfers), nrow(fw_nontransfers)),]
-fw_transfer_data <- rbind(fw_transfer_sample, fw_nontransfers)
+#fw_transfers <- fw_data[fw_data$transfer == 0,]
+#fw_nontransfers <- fw_data[fw_data$transfer == 1,]
+#fw_transfer_sample <- fw_transfers[sample(nrow(fw_transfers), nrow(fw_nontransfers)),]
+#fw_balanced_data <- rbind(fw_transfer_sample, fw_nontransfers)
 #class_penalty <- sum(fw_train_data$transfer == 0) / 
   #sum(fw_train_data$transfer == 1)
 ```
 
 ```{r}
-#fw_trainingIndex <- createDataPartition(fw_balanced_data$transfer,
-                                        #p = 0.7, list = FALSE)
-#fw_train_data <- fw_balanced_data[fw_trainingIndex,]
-#fw_test_data <- fw_balanced_data[-fw_trainingIndex, ]
-fw_train_data <- fw_train_data[, setdiff(names(fw_train_data), "name")]
+set.seed(278)
+fw_trainingIndex <- createDataPartition(fw_data$transfer,
+                                        p = 0.7, list = FALSE)
+fw_train_data <- fw_data[fw_trainingIndex,]
+fw_test_data <- fw_data[-fw_trainingIndex,]
+fw_train_transfers <- fw_train_data[fw_train_data$transfer == 0,]
+fw_train_nontransfers <- fw_train_data[fw_train_data$transfer == 1,]
+fw_train_transfer_sample <- fw_train_transfers[sample
+                                                  (nrow(fw_train_transfers),
+                                                      nrow
+                                                    (fw_train_nontransfers)),]
+fw_balanced_train <- rbind(fw_train_transfer_sample, fw_train_nontransfers)
+fw_balanced_train <- fw_balanced_train[, setdiff(names(fw_balanced_train), "name")]
 fw_test_data <- fw_test_data[, setdiff(names(fw_test_data), "name")]
+
 ```
 
 ```{r}
-fw_lgbtrain <- lgb.Dataset(data = as.matrix(fw_train_data[, setdiff(names(fw_train_data), "transfer")]), label = fw_train_data$transfer, 
+fw_lgbtrain <- lgb.Dataset(data = as.matrix(fw_balanced_train[, setdiff(names(fw_balanced_train), "transfer")]), label = fw_balanced_train$transfer, 
                            free_raw_data = FALSE)
 fw_lgbtest <- lgb.Dataset(data = as.matrix(fw_test_data[, setdiff(names(fw_test_data), "transfer")]), label = fw_test_data$transfer)
 ```
@@ -56,10 +70,10 @@ fw_parameters <- list(
     #sum(fw_train_data$transfer== 1),
   boosting_type = "gbdt",
   learning_rate = 0.075,
-  num_leaves = 65,
+  num_leaves = 50,
   bagging_fraction = 0.8,
   feature_fraction = 0.8,
-  max_depth = -1
+  max_depth = 7
 )
 ```
 
@@ -69,7 +83,7 @@ fw_gbm_model <- lgb.train(
   data = fw_lgbtrain,
   nrounds = 250,
   valids = list(test = fw_lgbtest),
-  early_stopping_rounds = 10
+  early_stopping_rounds = 15
 )
 ```
 
@@ -202,9 +216,9 @@ fw_variable_importance_g
 ```
 
 ```{r}
-ggsave("undersampled_fw_roc.png", plot = fw_roc_g, width = 8,
+ggsave("undersampled_fw_unbal_pred_roc.png", plot = fw_roc_g, width = 8,
        height = 6, bg = "white")
-ggsave("undersampled_fw_conf_matrix.png", plot = fw_conf_matrix_g,
+ggsave("undersampled_fw_unbal_pred_conf_matrix.png", plot = fw_conf_matrix_g,
        width = 8, height = 6, bg = "white")
 ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8, 
        height = 6, bg = "white")
@@ -214,27 +228,34 @@ ggsave("fw_var_import.png", plot = fw_variable_importance_g, width = 8,
 
 ```{r}
 set.seed(278)
-mf_transfers <- mf_data[mf_data$transfer == 0,]
-mf_nontransfers <- mf_data[mf_data$transfer == 1,]
-mf_transfer_sample <- mf_transfers[sample(nrow(mf_transfers), nrow(mf_nontransfers)),]
-mf_balanced_data <- rbind(mf_transfer_sample, mf_nontransfers)
+#mf_transfers <- mf_data[mf_data$transfer == 0,]
+#mf_nontransfers <- mf_data[mf_data$transfer == 1,]
+#mf_transfer_sample <- mf_transfers[sample(nrow(mf_transfers), nrow(mf_nontransfers)),]
+#mf_balanced_data <- rbind(mf_transfer_sample, mf_nontransfers)
 #mf_class_penalty <- sum(mf_train_data$transfer == 0) /
   #sum(mf_train_data$transfer == 1)
 ```
 
 ```{r}
-mf_trainingIndex <- createDataPartition(mf_balanced_data$transfer,
+set.seed(278)
+mf_trainingIndex <- createDataPartition(mf_data$transfer,
                                         p = 0.7, list = FALSE)
-mf_train_data <- mf_balanced_data[mf_trainingIndex,]
-mf_test_data <- mf_balanced_data[-mf_trainingIndex, ]
-mf_train_data <- mf_train_data[, setdiff(names(mf_train_data), "name")]
+mf_train_data <- mf_data[mf_trainingIndex,]
+mf_test_data <- mf_data[-mf_trainingIndex, ]
+mf_train_transfers <- mf_train_data[mf_train_data$transfer == 0,]
+mf_train_nontransfers <- mf_train_data[mf_train_data$transfer == 1,]
+mf_train_transfer_sample <- mf_train_transfers[sample(nrow(mf_train_transfers),
+                                                      nrow
+                                                      (mf_train_nontransfers)),]
+mf_balanced_train <- rbind(mf_train_transfer_sample, mf_train_nontransfers)
+mf_balanced_train <- mf_balanced_train[, setdiff(names(mf_balanced_train), "name")]
 mf_test_data <- mf_test_data[, setdiff(names(mf_test_data), "name")]
 #mf_class_penalty <- sum(mf_train_data$transfer == 0) /
   #sum(mf_train_data$transfer == 1)
 ```
 
 ```{r}
-mf_lgbtrain <- lgb.Dataset(data = as.matrix(mf_train_data[, setdiff(names(mf_train_data), "transfer")]), label = mf_train_data$transfer, 
+mf_lgbtrain <- lgb.Dataset(data = as.matrix(mf_balanced_train[, setdiff(names(mf_balanced_train), "transfer")]), label = mf_balanced_train$transfer, 
                            free_raw_data = FALSE)
 mf_lgbtest <- lgb.Dataset(data = as.matrix(mf_test_data[, setdiff(names(mf_test_data), "transfer")]), label = mf_test_data$transfer)
 
@@ -247,10 +268,10 @@ mf_parameters <- list(
   #scale_pos_weight = mf_class_penalty,
   boosting_type = "gbdt",
   learning_rate = 0.075,
-  num_leaves = 65,
+  num_leaves = 50,
   bagging_fraction = 0.8,
   feature_fraction = 0.8,
-  max_depth = -1
+  max_depth = 7
 )
 ```
 
@@ -260,7 +281,7 @@ mf_gbm_model <- lgb.train(
   data = mf_lgbtrain,
   nrounds = 250,
   valids = list(test = mf_lgbtest),
-  early_stopping_rounds = 10
+  early_stopping_rounds = 15
 )
 ```
 
@@ -381,9 +402,9 @@ mf_variable_importance_g
 ```
 
 ```{r}
-ggsave("undersampling_mf_roc.png", plot = mf_roc_g, width = 8,
+ggsave("undersampling_mf_unbal_pred_roc.png", plot = mf_roc_g, width = 8,
        height = 6, bg = "white")
-ggsave("undersampling_mf_conf_matrix.png", plot = mf_conf_matrix_g,
+ggsave("undersampling_mf_unbal_pred_conf_matrix.png", plot = mf_conf_matrix_g,
        width = 8, height = 6, bg = "white")
 ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8, 
        height = 6, bg = "white")
@@ -393,26 +414,33 @@ ggsave("mf_var_import.png", plot = mf_variable_importance_g, width = 8,
 
 ```{r}
 set.seed(278)
-df_transfers <- df_data[df_data$transfer == 0,]
-df_nontransfers <- df_data[df_data$transfer == 1,]
-df_transfer_sample <- df_transfers[sample(nrow(df_transfers), nrow(df_nontransfers)),]
-df_balanced_data <- rbind(df_transfer_sample, df_nontransfers)
+#df_transfers <- df_data[df_data$transfer == 0,]
+#df_nontransfers <- df_data[df_data$transfer == 1,]
+#df_transfer_sample <- df_transfers[sample(nrow(df_transfers), nrow(df_nontransfers)),]
+#df_balanced_data <- rbind(df_transfer_sample, df_nontransfers)
 ```
 
 ```{r}
 set.seed(278)
-df_trainingIndex <- createDataPartition(df_balanced_data$transfer,
+df_trainingIndex <- createDataPartition(df_data$transfer,
                                         p = 0.7, list = FALSE)
-df_train_data <- df_balanced_data[df_trainingIndex,]
-df_test_data <- df_balanced_data[-df_trainingIndex, ]
-df_train_data <- df_train_data[, setdiff(names(df_train_data), "name")]
+df_train_data <- df_data[df_trainingIndex,]
+df_test_data <- df_data[-df_trainingIndex, ]
+df_train_transfers <- df_train_data[df_train_data$transfer == 0,]
+df_train_nontransfers <- df_train_data[df_train_data$transfer == 1,]
+df_train_transfer_sample <- df_train_transfers[sample(nrow(df_train_transfers),
+                                                      nrow
+                                                      (df_train_nontransfers)),]
+df_balanced_train <- rbind(df_train_transfer_sample, df_train_nontransfers)
+df_balanced_train <- df_balanced_train[, setdiff(names(df_balanced_train), "name")]
 df_test_data <- df_test_data[, setdiff(names(df_test_data), "name")]
 #df_class_penalty <- sum(df_train_data$transfer == 0) /
   #sum(df_train_data$transfer == 1)
+
 ```
 
 ```{r}
-df_lgbtrain <- lgb.Dataset(data = as.matrix(df_train_data[, setdiff(names(df_train_data), "transfer")]), label = df_train_data$transfer, 
+df_lgbtrain <- lgb.Dataset(data = as.matrix(df_balanced_train[, setdiff(names(df_balanced_train), "transfer")]), label = df_balanced_train$transfer, 
                            free_raw_data = FALSE)
 df_lgbtest <- lgb.Dataset(data = as.matrix(df_test_data[, setdiff(names(df_test_data), "transfer")]), label = df_test_data$transfer)
 ```
@@ -424,10 +452,10 @@ df_parameters <- list(
   #scale_pos_weight = df_class_penalty,
   boosting_type = "gbdt",
   learning_rate = 0.075,
-  num_leaves = 65,
+  num_leaves = 50,
   bagging_fraction = 0.8,
   feature_fraction = 0.8,
-  max_depth = -1
+  max_depth = 7
 )
 ```
 
@@ -437,7 +465,7 @@ df_gbm_model <- lgb.train(
   data = df_lgbtrain,
   nrounds = 250,
   valids = list(test = df_lgbtest),
-  early_stopping_rounds = 10
+  early_stopping_rounds = 15
 )
 ```
 
@@ -556,9 +584,9 @@ df_variable_importance_g
 ```
 
 ```{r}
-ggsave("undersampling_df_roc.png", plot = df_roc_g, width = 8,
+ggsave("undersampling_df_unbal_pred_roc.png", plot = df_roc_g, width = 8,
        height = 6, bg = "white")
-ggsave("undersampling_df_conf_matrix.png", plot = df_conf_matrix_g,
+ggsave("undersampling_df_unbal_pred_conf_matrix.png", plot = df_conf_matrix_g,
        width = 8, height = 6, bg = "white")
 ggsave("df_var_import.png", plot = df_variable_importance_g, width = 8, 
        height = 6, bg = "white")
