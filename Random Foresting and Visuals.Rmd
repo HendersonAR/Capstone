@@ -418,147 +418,81 @@ print(df_conf_matrix_g)
 
 ```
 ```{r}
-plot_pos_cm <- function(pos, samp_type, df, splits_fn) {
-  
-  pos_data <- subset(df, df[[pos]] == 1)
-  pos_data$transfer <- factor(pos_data$transfer)
-  if (nrow(pos_data) < 50) return(NULL)
-  
-  # split
-  sp    <- splits_fn(pos_data, "transfer")
-  train <- sp$train
-  valid <- sp$validation
-  
-  # sample
-  if (samp_type == "Down") {
-    sampled <- downSample(
-      x     = train[, setdiff(names(train), "transfer")],
-      y     = train$transfer,
-      yname = "transfer"
-    )
-  } else {
-    sampled <- upSample(
-      x     = train[, setdiff(names(train), "transfer")],
-      y     = train$transfer,
-      yname = "transfer"
-    )
-  }
-  
-  # fit
-  rf_mod <- randomForest(
-    transfer ~ .,
-    data   = sampled,
-    ntree  = 500,
-    mtry   = floor(sqrt(ncol(sampled) - 1))
-  )
-  
-  # predict & cm
-  preds      <- predict(rf_mod, valid)
-  cm_matrix  <- confusionMatrix(factor(preds), valid$transfer)
-  df_cm      <- as.data.frame(cm_matrix$table)
-  
-  # relabel
-  df_cm$Prediction <- factor(
-    df_cm$Prediction,
-    levels = c("0","1"),
-    labels = c("no transfer","transferred")
-  )
-  df_cm$Reference  <- factor(
-    df_cm$Reference,
-    levels = c("0","1"),
-    labels = c("no transfer","transferred")
-  )
-  
-  # proportion
-  total <- sum(df_cm$Freq)
-  df_cm$Proportion <- df_cm$Freq / total
-  
-  # plot
-  ggplot(df_cm, aes(x = Prediction, y = Reference)) +
-    geom_tile(fill = "white", color = "black") +
-    geom_text(aes(label = paste0(
-      Freq, " (", sprintf("%.2f", Proportion * 100), "%)"
-    )), size = 5) +
-    theme_minimal() +
-    labs(
-      title = paste("Confusion Matrix –", pos, "(", samp_type, "Sampling)"),
-      x     = "Predicted Value",
-      y     = "True Value"
-    ) +
-    theme(
-      axis.text         = element_text(size = 13, color = "black"),
-      axis.text.y       = element_text(angle = 90, hjust = 0.5),
-      axis.title        = element_text(size = 13, color = "black"),
-      plot.title        = element_text(face = "bold", size = 14, hjust = 0.5)
-    )
-}
+mf_df <- data.frame(
+  Metric = names(mf_metrics),
+  Value  = round(as.numeric(mf_metrics), 3),
+  row.names = NULL
+)
 
-# positions and sampling types
-positions  <- c("MF","FW","DF")
-samplings  <- c("Down","Up")
+fw_df <- data.frame(
+  Metric = names(fw_metrics),
+  Value  = round(as.numeric(fw_metrics), 3),
+  row.names = NULL
+)
 
-# iterate & print plots
-set.seed(42)
-for (pos in positions) {
-  for (s in samplings) {
-    p <- plot_pos_cm(pos, s, data, three_way_split)
-    if (!is.null(p)) print(p)
-  }
-}
+df_df <- data.frame(
+  Metric = names(df_metrics),
+  Value  = round(as.numeric(df_metrics), 3),
+  row.names = NULL
+)
+
+# Print each with a caption
+kable(mf_df, caption = "Midfielders RF Model Performance")
+kable(fw_df, caption = "Forwards RF Model Performance")
+kable(df_df, caption = "Defenders RF Model Performance")
 ```
 
 
 
 Random Forest Models / Position
 
-```{r}
-positions <- c("MF", "FW", "DF")
+```{r rf_tables, results='asis', echo=FALSE}
+# 1) Put your cm objects in a list
+cms <- list(
+  "Midfielders" = mf_conf_matrix,
+  "Forwards"    = fw_conf_matrix,
+  "Defenders"   = df_conf_matrix
+)
 
-models <- list()
-conf_matrices <- list()
-
-for (pos in positions) {
+# 2) Loop and build each table
+for (pos in names(cms)) {
+  cm <- cms[[pos]]
   
-  pos_data <- subset(data, data[[pos]] == 1)
-  pos_data <- pos_data[, !(names(pos_data) %in% c("season", "player", "MD", "FW", "DF"))]
-  pos_data$transfer <- as.factor(pos_data$transfer)
+  # Manually create the df so Metric names are exactly what you want
+  df <- data.frame(
+    Metric = c("Accuracy", "Kappa", "Sensitivity", "Specificity"),
+    Value  = round(c(
+      cm$overall["Accuracy"],
+      cm$overall["Kappa"],
+      cm$byClass["Sensitivity"],
+      cm$byClass["Specificity"]
+    ), 3),
+    stringsAsFactors = FALSE
+  )
   
-  if (nrow(pos_data) < 10) {
-    cat("Not enough data for position", pos, "\n")
-    next
-  }
+  # 3) Create and style the kable, auto-detecting HTML vs LaTeX
+  tbl <- kable(
+    df,
+    caption   = paste0("RF Model Performance — ", pos),
+    booktabs  = TRUE,
+    col.names = c("**Metric**", "**Value**")
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position   = "center",
+    if (knitr::is_html_output()) {
+      bootstrap_options = c("striped","hover","condensed","responsive")
+    } else {
+      latex_options = c("striped","hold_position","repeat_header")
+    }
+  ) %>%
+  row_spec(
+    0,
+    bold       = TRUE,
+    background = if (knitr::is_html_output()) "#EFEFEF" else "#E8E8E8"
+  )
   
-  # upSample to upsample ds
-  # downSample to downsample ds
-  ds <- upSample(x = pos_data[, setdiff(names(pos_data), "transfer")],
-                   y = pos_data$transfer,
-                   yname = "transfer")
-  
-  # Split the downsampled data into training and testing sets
-  set.seed(42)
-  trainIndex <- createDataPartition(ds$transfer, p = 0.7, list = FALSE)
-  trainData <- ds[trainIndex, ]
-  testData <- ds[-trainIndex, ]
-  
-  # Train the Random Forest model on the balanced dataset
-  rf_model <- randomForest(transfer ~ ., 
-                           data = trainData, 
-                           ntree = 500, 
-                           mtry = floor(sqrt(ncol(trainData) - 1)), 
-                           importance = TRUE)
-  
-  models[[pos]] <- rf_model
-  
-  # Make predictions on the test set
-  predictions <- predict(rf_model, testData)
-  
-  # Evaluate the model performance
-  conf_mat <- confusionMatrix(predictions, testData$transfer)
-  conf_matrices[[pos]] <- conf_mat
-  
-  cat("Confusion Matrix for", pos, "players:\n")
-  print(conf_mat)
-  cat("\n---------------------------------\n")
+  print(tbl)
 }
 ```
 
